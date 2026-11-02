@@ -205,7 +205,7 @@ async function generateSpeechWav(tts, text, options) {
   if (!speechChunks.length) throw new Error("No speech text was available to generate.");
   if (!state.TextSplitterStream) throw new Error("Kokoro's streaming text splitter is unavailable.");
   const splitter = new state.TextSplitterStream();
-  for (const chunk of speechChunks) splitter.push(chunk + "\\n");
+  for (const chunk of speechChunks) splitter.push(chunk + "\n");
   splitter.close();
 
   const waveChunks = [];
