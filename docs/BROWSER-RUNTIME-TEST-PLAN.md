@@ -101,4 +101,16 @@ The team must set numerical performance targets after collecting baseline measur
 
 | Run | Browser / OS | Cache | Model load | Short synthesis | 500 chars | 2k chars | 10k chars | Result / notes |
 |---|---|---|---|---|---|---|---|---|
-| Baseline 1 | Pending | Cold | Pending | Pending | Pending | Pending | Pending | Pending |
+| Baseline 1 | Chrome / Windows (exact versions and hardware details not yet recorded) | Cold / first observed load | 1–2 minutes (user-reported) | Four-sentence smoke test completed; exact timing pending | Pending | Pending | Pending | Model/voice loaded; four WAVs played/downloaded; ZIP download worked |
+
+
+## Baseline recorded 2026-11-02
+
+Founder-reported first model load: approximately 1–2 minutes in Google Chrome on a CPU-only Windows PC. This is an initial observation, not a controlled benchmark. The exact Chrome version, CPU model, RAM, network throughput, cache state and bytes transferred were not recorded.
+
+The application now displays local timings for:
+- Model/runtime initialization from the Load action until the Kokoro runtime resolves.
+- Cumulative synthesis time across all generated segments.
+- Total generation job time, including WAV conversion and ZIP packaging.
+
+For the next run, record these three values and use DevTools Network to capture actual transferred bytes and cache indicators. Compare a cold run (fresh profile or cleared site data) with a warm reload (same profile without clearing site data). Do not assume a warm reload is cached until the Network panel confirms it.
