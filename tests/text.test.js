@@ -93,3 +93,19 @@ test("accepts a full script with multiple paragraphs", () => {
   assert.equal(result.valid, true);
   assert.deepEqual(result.paragraphs, ["First paragraph.", "Second paragraph."]);
 });
+
+test("splits long speech input into safe chunks without dropping words", async () => {
+  const { getSpeechChunks } = await import("../src/lib/text.js");
+  const source = "narration ".repeat(90).trim();
+  const chunks = getSpeechChunks(source, 100);
+  assert(chunks.length > 1);
+  assert(chunks.every(chunk => chunk.length <= 100));
+  assert.equal(chunks.join(" "), source);
+});
+
+test("preserves sentence order when preparing streamed speech chunks", async () => {
+  const { getSpeechChunks } = await import("../src/lib/text.js");
+  assert.deepEqual(getSpeechChunks("First sentence. Second sentence!"), [
+    "First sentence.", "Second sentence!"
+  ]);
+});

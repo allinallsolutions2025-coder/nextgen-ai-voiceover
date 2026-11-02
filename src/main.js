@@ -1,4 +1,4 @@
-import { validateParagraphInput } from "./lib/text.js";
+import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
@@ -164,17 +164,76 @@ async function loadModel() {
   }
 }
 
-async function toWavBlob(audio) {
-  if (!audio || typeof audio.toWav !== "function") {
-    throw new Error("The audio result did not provide WAV data.");
+function createWavBlobFromSamples(samples, sampleRate) {
+  const dataBytes = samples.length * 2;
+  const buffer = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(buffer);
+  const writeText = (offset, value) => {
+    for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
+  };
+
+  writeText(0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  writeText(8, "WAVE");
+  writeText(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, "data");
+  view.setUint32(40, dataBytes, true);
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(44 + index * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
   }
-  const value = await audio.toWav();
-  if (value instanceof Blob) return value;
-  if (value instanceof ArrayBuffer) return new Blob([value], { type: "audio/wav" });
-  if (ArrayBuffer.isView(value)) {
-    return new Blob([value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)], { type: "audio/wav" });
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function generateSpeechWav(tts, text, options) {
+  if (typeof tts.stream !== "function") {
+    throw new Error("This Kokoro runtime does not support streaming audio generation.");
   }
-  throw new Error("The voice engine returned an unsupported WAV data type.");
+
+  const speechChunks = getSpeechChunks(text);
+  if (!speechChunks.length) throw new Error("No speech text was available to generate.");
+  const streamInput = speechChunks.join("\\n");
+  const waveChunks = [];
+  let sampleRate = null;
+  let totalSamples = 0;
+
+  for await (const item of tts.stream(streamInput, { ...options, split_pattern: /\\n+/ })) {
+    const raw = item?.audio?.audio;
+    const rate = Number(item?.audio?.sampling_rate);
+    if (!raw || !ArrayBuffer.isView(raw) || !Number.isFinite(rate)) {
+      throw new Error("The streaming voice engine returned an unsupported audio chunk.");
+    }
+    if (sampleRate !== null && sampleRate !== rate) {
+      throw new Error("The voice engine changed sample rate during one voiceover.");
+    }
+    sampleRate = rate;
+    const samples = raw instanceof Float32Array ? raw : Float32Array.from(raw);
+    waveChunks.push(samples);
+    totalSamples += samples.length;
+  }
+
+  if (!waveChunks.length || !sampleRate) {
+    throw new Error("The voice engine returned no audio chunks.");
+  }
+
+  const pauseSamples = Math.round(sampleRate * 0.09);
+  const totalLength = totalSamples + Math.max(0, waveChunks.length - 1) * pauseSamples;
+  const combined = new Float32Array(totalLength);
+  let offset = 0;
+  for (let index = 0; index < waveChunks.length; index += 1) {
+    if (index > 0) offset += pauseSamples;
+    combined.set(waveChunks[index], offset);
+    offset += waveChunks[index].length;
+  }
+  return createWavBlobFromSamples(combined, sampleRate);
 }
 
 function addAudioResult({ title, subtitle, filename, blob, kind, index }) {
@@ -263,8 +322,7 @@ async function generateAudio() {
       setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + "…");
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const audio = await tts.generate(validation.paragraphs[index], { voice, speed });
-      const wavBlob = await toWavBlob(audio);
+      const wavBlob = await generateSpeechWav(tts, validation.paragraphs[index], { voice, speed });
       paragraphBlobs.push(wavBlob);
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + ".wav";
       zip.file(filename, wavBlob);
@@ -287,8 +345,7 @@ async function generateAudio() {
     } else {
       setStatus("Generating one continuous voiceover for the complete script…");
       await new Promise((resolve) => setTimeout(resolve, 0));
-      const fullScriptAudio = await tts.generate(scriptForSpeech, { voice, speed });
-      fullScriptBlob = await toWavBlob(fullScriptAudio);
+      fullScriptBlob = await generateSpeechWav(tts, scriptForSpeech, { voice, speed });
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }

@@ -43,8 +43,11 @@ if (!main.includes('id = "fullScriptAudio"') || !main.includes('download.id = "f
 if (html.includes("Performance diagnostics") || html.includes("modelLoadMetric") || html.includes("synthesisMetric")) {
   throw new Error("Performance diagnostics must not be part of the public app UI.");
 }
-if (!main.includes("validateParagraphInput") || !main.includes("tts.generate(scriptForSpeech")) {
-  throw new Error("Paragraph generation and one-piece full-script generation are required.");
+if (!main.includes("validateParagraphInput") || !main.includes("generateSpeechWav(tts, scriptForSpeech")) {
+  throw new Error("Paragraph generation and full-script streaming are required.");
+}
+if (!main.includes("tts.stream(") || !main.includes("createWavBlobFromSamples")) {
+  throw new Error("Long narration must use streamed audio chunks joined into one WAV.");
 }
 
 console.log("Static application validation passed.");

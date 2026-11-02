@@ -155,3 +155,23 @@ export function validateInput(text, maxCharacters = 20000, maxSegments = 150) {
   }
   return { valid: true, code: "ok", message: "", sentences };
 }
+
+export function getSpeechChunks(text, maxChunkLength = 350) {
+  const normalized = String(text ?? "").replace(/[\\r\\n]+/g, " ").replace(/\\s+/g, " ").trim();
+  if (!normalized) return [];
+  const limit = Math.max(80, Math.floor(Number(maxChunkLength) || 350));
+  const result = [];
+
+  for (const sentence of getSentences(normalized)) {
+    let remaining = sentence;
+    while (remaining.length > limit) {
+      let boundary = remaining.lastIndexOf(" ", limit);
+      if (boundary < Math.floor(limit * 0.55)) boundary = limit;
+      const chunk = remaining.slice(0, boundary).trim();
+      if (chunk) result.push(chunk);
+      remaining = remaining.slice(boundary).trim();
+    }
+    if (remaining) result.push(remaining);
+  }
+  return result;
+}
