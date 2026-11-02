@@ -407,19 +407,19 @@ Phase 1 is complete when these deliverables exist:
 | Local compute capability | CPU-only confirmed by founder |
 | GitHub private repository | Created and access verified |
 | Phase 1 planning document | Prepared; committed separately from application code |
-| Browser/runtime benchmark | Live Pages Chromium test passed: model 3.29 s and three representative voice generations; founder-PC timing, warm-cache and memory benchmarks pending |
-| Browser/device test matrix | Headless Chromium/Linux passed with 28 voices discovered and three voices generating valid WAVs; Windows Chrome, warm-cache, mobile and low-memory tests pending |
+| Browser/runtime benchmark | Live Pages Chromium full-catalogue test passed: model initialized in 3.75 s; all 28 English voices generated valid WAVs; founder-PC timing, warm-cache and memory benchmarks pending |
+| Browser/device test matrix | Headless Chromium/Linux passed: all 28 registered English voices generated valid RIFF/WAVE files; Windows Chrome, warm-cache, mobile and low-memory tests pending |
 | Full third-party licensing register | Pending |
 | Fair-use enforcement architecture | Pending |
-| CI workflows and baseline tests | GitHub Actions passing: syntax, 11 unit tests and static validation; automated live Pages Chromium smoke test passed |
-| English multi-voice capability | Verified: 28 active English voices discovered; Adam, Heart and Emma generated valid WAVs in live Pages test |
+| CI workflows and baseline tests | GitHub Actions passing: syntax, 16 unit tests and static validation; automated live Pages Chromium test generated valid WAVs with all 28 registered English voices |
+| English multi-voice capability | Fully verified for the active registry: all 28 English voices generated valid WAVs in the live Pages Chromium test |
 | Multilingual voice support | Pending; active Kokoro.js 1.2.1 registry exposes English voices only |
 | Final Phase 1 sign-off | Pending |
 
 ## 15. Recommended immediate next steps
 
 1. Review the initial browser test application and CI workflow committed to the private GitHub repository.
-2. Live GitHub Pages Chromium test completed: 28 English voices discovered; Adam, Heart and Emma each generated valid WAVs; individual WAV and ZIP downloads verified.
+2. Live GitHub Pages Chromium full-catalogue test completed: all 28 registered English voices generated valid WAVs; all 28 voice assets resolved; individual WAV and ZIP downloads verified. See the [full test report](reports/2026-11-02-full-28-voice-browser-test.md).
 3. Record cold/warm model loading and speech generation measurements on the founder's CPU-only Windows device and at least one additional mainstream browser/device; test more voices from the 28-entry English catalogue.
 4. Complete the component-level licensing register and decide how fair-use entitlements will be enforced.
 5. Finalize the MVP architecture and prioritized Phase 2 backlog based on those results.

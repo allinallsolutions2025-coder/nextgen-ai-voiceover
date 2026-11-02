@@ -1,5 +1,7 @@
 # Multi-voice live GitHub Pages browser test
 
+> This earlier representative three-voice test is superseded by the [full 28-voice live browser test](2026-11-02-full-28-voice-browser-test.md), which generated and validated audio for every registered English voice.
+
 **Date:** 2026-11-02  
 **Result:** PASSED  
 **Published app:** [NextGen AI Voiceover](https://allinallsolutions2025-coder.github.io/nextgen-ai-voiceover/)  
