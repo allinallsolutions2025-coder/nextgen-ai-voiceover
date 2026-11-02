@@ -6,7 +6,7 @@
   "description": "Browser-first Kokoro text-to-speech prototype for NextGen AI Voiceover",
   "scripts": {
     "check": "node --check src/main.js && node --check src/lib/text.js && node --check scripts/check-build.js && node --check scripts/build-site.js",
-    "test": "node --test",
+    "test": "node --test tests/*.test.js",
     "build": "node scripts/build-site.js"
   },
   "engines": {
