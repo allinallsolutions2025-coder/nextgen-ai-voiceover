@@ -51,8 +51,9 @@ async function waitForGeneration(page) {
   assert(status.startsWith("Voiceover complete."), "Speech generation failed: " + status);
 }
 
-async function inspectAudio(page, selector) {
-  return page.locator(selector).evaluate(async audio => {
+async function inspectAudio(page, selector, index = null) {
+  const locator = index === null ? page.locator(selector) : page.locator(selector).nth(index);
+  return locator.evaluate(async audio => {
     const response = await fetch(audio.currentSrc || audio.src);
     const blob = await response.blob();
     const bytes = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
@@ -79,7 +80,7 @@ try {
   page.on("response", response => {
     const request = response.request();
     const url = safeUrl(response.url());
-    if (/huggingface|hf\\.co|jsdelivr|onnx|kokoro/i.test(url)) {
+    if (/huggingface|hf\.co|jsdelivr|onnx|kokoro/i.test(url)) {
       report.network.push({
         url, status: response.status(), resourceType: request.resourceType(),
         contentLength: response.headers()["content-length"] || null
@@ -147,9 +148,7 @@ try {
   const paragraphCount = await page.locator(".paragraph-audio-card").count();
   assert.equal(paragraphCount, 2, "Expected a separate audio output for each paragraph.");
   for (let i = 0; i < paragraphCount; i += 1) {
-    paragraphWavs.push(await inspectAudio(page, ".paragraph-audio-card:nth-of-type(" + (i + 2) + ") audio").catch(async () =>
-      inspectAudio(page, ".paragraph-audio-card audio").then(x => x)
-    ));
+    paragraphWavs.push(await inspectAudio(page, ".paragraph-audio-card audio", i));
   }
   report.paragraphWavs = paragraphWavs;
   report.fullScriptWav = fullWav;
@@ -225,7 +224,7 @@ try {
     report.voiceAssetsObserved.some(item => item.url.includes("/" + id + ".bin") && [200, 302, 307].includes(item.status))
   );
   report.resolvedVoiceAssetResponses = report.network.filter(item =>
-    /cdn\\.hf\\.co/.test(item.url) && item.status === 200 &&
+    /cdn\.hf\.co/.test(item.url) && item.status === 200 &&
     Number(item.contentLength || 0) >= 500000 && Number(item.contentLength || 0) <= 550000
   );
   report.checks.voiceAssetsResolved = report.resolvedVoiceAssetResponses.length >= voices.length;
