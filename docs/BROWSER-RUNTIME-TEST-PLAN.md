@@ -114,3 +114,35 @@ The application now displays local timings for:
 - Total generation job time, including WAV conversion and ZIP packaging.
 
 For the next run, record these three values and use DevTools Network to capture actual transferred bytes and cache indicators. Compare a cold run (fresh profile or cleared site data) with a warm reload (same profile without clearing site data). Do not assume a warm reload is cached until the Network panel confirms it.
+
+
+## HAR review — 2026-11-02
+
+A Chrome HAR was supplied for the Codespaces preview at `https://turbo-space-yodel-5v4wpgr49qqr2wwj-4173.app.github.dev/`.
+
+### Observed in the HAR
+
+- Page `onContentLoad`: approximately 391 ms.
+- Page `onLoad`: approximately 490 ms.
+- Nine network entries were recorded.
+- The app HTML returned HTTP 200.
+- CSS, app JavaScript and text helper JavaScript were reported by Chrome as **memory cache**.
+- Kokoro.js 1.2.1, the Transformers.js WASM JavaScript module, the 21.6 MB uncompressed WASM binary and JSZip were reported as **disk cache**.
+- The browser requested `/favicon.ico`, which returned HTTP 404.
+
+### What cannot be concluded from this HAR
+
+- It is a warm-cache capture for several runtime assets, not a cold first-visit download measurement.
+- No ONNX model weight or voice asset URL appears among the nine recorded requests. Therefore this file does not establish whether the model weights were newly downloaded, previously cached in another browser storage layer, or not fetched during the recorded session.
+- The HAR does not include the visible Performance diagnostics values from the UI, nor the actual model initialization duration or synthesis duration.
+- The content sizes shown for cached files are resource sizes, not bytes transferred during this capture.
+
+### Follow-up
+
+1. Capture a cold run in a fresh Chrome profile or after clearing site data for the preview origin.
+2. Keep DevTools Network recording active with Preserve log enabled before clicking **Load voice model**.
+3. Wait for **Model ready**, generate a short script, then export the HAR.
+4. Confirm that ONNX model/config and voice asset URLs appear; record their transferred sizes and whether any are served from cache.
+5. Screenshot the Performance diagnostics panel after generation.
+
+The missing favicon request is fixed by adding an inline SVG data URL to the page head, avoiding an extra file and network request.
