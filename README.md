@@ -1,22 +1,22 @@
 # NextGen AI Voiceover
 
-Browser-first Kokoro text-to-speech prototype. This repository is the source of truth for the product's code, tests and documentation.
+Browser-first Kokoro text-to-speech prototype. This repository is the private source of truth for the product's code, tests and documentation.
 
 ## Current milestone
 
-The first browser-runtime test harness preserves the approach used in the original Hugging Face Static Space:
+The browser test application uses:
 - Kokoro.js 1.2.1.
 - ONNX model: `onnx-community/Kokoro-82M-v1.0-ONNX`.
 - Quantization: q8.
 - Device: WASM.
-- Runtime voice list retrieved from Kokoro.js when available.
-- WAV generation in the browser and ZIP packaging with JSZip.
+- Runtime voice discovery where supported.
+- Browser-side WAV generation and ZIP packaging.
 
-The application does not upload the user's script to a NextGen AI Voiceover backend. Model and library assets are downloaded from their configured public CDN/model repositories. Browser cache behaviour depends on the browser and device.
+The app does not upload the user's script to a NextGen AI Voiceover backend. Runtime/model assets are fetched from the configured public CDN/model repositories. Browser cache behaviour depends on browser, device and storage policy.
 
 ## Run locally
 
-Use Node.js 22 or later.
+Use Node.js 24 or later.
 
 ```bash
 npm ci
@@ -25,52 +25,40 @@ npm test
 npm run build
 ```
 
-Serve the repository root over localhost (the browser app uses ES modules):
+Serve the project root over localhost:
 
 ```bash
 python -m http.server 4173
 ```
 
-Open http://localhost:4173 in Chrome or Edge. Alternatively, use any static HTTP server.
+Open http://localhost:4173 in Chrome or Edge.
 
-1. Select **Load voice model**.
-2. Wait for the model to finish loading.
-3. Paste a short test sentence.
-4. Select a voice and speed.
-5. Select **Generate WAV files**.
-6. Preview or download an individual WAV, or download the ZIP.
+## GitHub Actions
 
-The first model load may take several minutes. Keep the tab open during generation.
+- **CI** runs syntax checks, unit tests and a static-site build on pushes and pull requests.
+- **Deploy preview to GitHub Pages** is initially manual. Enable Pages with **Settings → Pages → Source → GitHub Actions**, review the Pages visibility requirements, then run it from the Actions tab.
 
-## Automated checks
+The Pages build publishes only `dist/`, not this repository's documentation, tests or workflow files. Note that the published browser JavaScript is public by nature.
 
-GitHub Actions runs on pushes to `main`, pull requests and manual dispatch. It performs:
-- JavaScript syntax checks.
-- Node.js unit tests for text parsing and input validation.
-- Static application validation.
+See [GitHub Pages testing instructions](docs/GITHUB-PAGES-TESTING.md).
 
-The routine CI job intentionally does not download the ONNX model or synthesize speech. That keeps pull-request checks fast, deterministic and independent of large model downloads.
+## Manual browser/model test
 
-## Manual model test
-
-The real Kokoro integration must be tested in a browser because the Node.js CI suite does not download model weights. Follow [the browser runtime test plan](docs/BROWSER-RUNTIME-TEST-PLAN.md).
-
-## Important technical distinction
-
-The founder's native Python files (`.pth` model and `.pt` voice embeddings) are not interchangeable with the browser ONNX model and its ONNX-compatible voice assets. The browser prototype uses the upstream ONNX repository.
+Follow [the Browser Runtime Test Plan](docs/BROWSER-RUNTIME-TEST-PLAN.md). Routine CI deliberately does not download model weights or perform inference.
 
 ## Project documentation
 
 - [Phase 1 — Research and Planning](docs/PHASE-1-RESEARCH-AND-PLANNING.md)
 - [Browser Runtime Test Plan](docs/BROWSER-RUNTIME-TEST-PLAN.md)
+- [GitHub Pages Testing](docs/GITHUB-PAGES-TESTING.md)
 
 ## Current limitations
 
-This is a technical prototype, not a production SaaS:
-- No accounts, billing, saved history or server-side usage enforcement.
-- No guarantee that the browser retains downloaded model assets.
-- No verified cross-device performance results yet.
+This remains a technical prototype, not a production SaaS:
+- No accounts, billing, cloud history or server-side usage enforcement.
+- No guarantee that browser model assets remain cached.
+- Performance and compatibility results are not yet complete.
 - No promise of unlimited generation.
-- Exact model/voice asset licensing and redistribution are still being documented.
+- Model, voice and dependency licensing review remains in progress.
 
-Do not add secrets, model weight binaries or private user audio to this repository.
+Never commit secrets, model weight binaries or private user audio.
