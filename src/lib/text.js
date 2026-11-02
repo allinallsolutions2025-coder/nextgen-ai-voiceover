@@ -29,7 +29,7 @@ export function cleanCopiedLine(rawLine) {
 
 function isSentencePeriod(line, segmentStart, punctuationIndex, punctuationEnd) {
   const previous = line[punctuationIndex - 1] ?? "";
-  const next = line[punctuationEnd] ?? "";
+  const next = line.slice(punctuationEnd).trimStart()[0] ?? "";
 
   // Keep decimal values such as 3.14 together.
   if (/\d/.test(previous) && /\d/.test(next)) return false;
