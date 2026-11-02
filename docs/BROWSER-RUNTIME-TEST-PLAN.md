@@ -165,3 +165,22 @@ The test fetched the quantized ONNX model (92,361,116-byte CDN response), Transf
 **Interpretation:** this is a fresh Playwright browser-context result on a GitHub-hosted Linux machine, not a benchmark of the founder's Windows PC and not evidence of warm-cache persistence. See [the detailed test report](reports/2026-11-02-pages-browser-smoke-test.md).
 
 **New issue to resolve:** the browser runtime exposes only `am_adam` in this test. Multi-voice support remains unverified; native `.pt` assets must not be assumed compatible with browser ONNX voice files.
+
+
+## Multi-voice live Pages test — 2026-11-02
+
+A real Playwright Chromium run against the published Pages URL passed:
+- Kokoro.js 1.2.1 discovered 28 voices through the `tts.voices` getter.
+- Adam (`am_adam`): 2 sentences, valid WAV output.
+- Heart (`af_heart`): 1 sentence, valid WAV output.
+- Emma (`bf_emma`): 1 sentence, valid WAV output.
+- WAV RIFF/WAVE headers passed for all three outputs.
+- ZIP validation and actual ZIP download passed; downloaded size matched generated size.
+- An individual WAV download passed and matched the generated blob size.
+- Three Hugging Face voice-file redirects resolved to CDN HTTP 200 responses (522,240 bytes each).
+
+The browser was headless Chrome 156 on a GitHub-hosted Linux runner. Model loading: 3.29 seconds; latest single-sentence synthesis diagnostic: 5.8 seconds. These are not founder-PC timings.
+
+See [the detailed multi-voice test report](reports/2026-11-02-multi-voice-browser-test.md).
+
+**Runtime limitation:** Kokoro.js 1.2.1 actively registers 28 English voices (20 American and 8 British). Other multilingual voice definitions are commented out in this version; multilingual support remains a separate engineering task.

@@ -51,6 +51,7 @@ The Pages build publishes only `dist/`, not repository documentation, tests or w
 - [Browser Runtime Test Plan](docs/BROWSER-RUNTIME-TEST-PLAN.md)
 - [GitHub Pages Testing](docs/GITHUB-PAGES-TESTING.md)
 - [Latest live Pages browser report](docs/reports/2026-11-02-pages-browser-smoke-test.md)
+- [Multi-voice live Pages test report](docs/reports/2026-11-02-multi-voice-browser-test.md)
 
 ## Current limitations
 

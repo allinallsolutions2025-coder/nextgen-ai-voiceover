@@ -407,18 +407,20 @@ Phase 1 is complete when these deliverables exist:
 | Local compute capability | CPU-only confirmed by founder |
 | GitHub private repository | Created and access verified |
 | Phase 1 planning document | Prepared; committed separately from application code |
-| Browser performance benchmarks | Live Pages Chromium smoke test passed: model 5.64 s, two-sentence synthesis 23.0 s on GitHub runner; founder-PC timing, warm-cache and memory benchmarks pending |
-| Clean browser/device test matrix | One headless Chromium/Linux run passed; Windows Chrome, warm-cache, mobile and low-memory device tests pending |
+| Browser/runtime benchmark | Live Pages Chromium test passed: model 3.29 s and three representative voice generations; founder-PC timing, warm-cache and memory benchmarks pending |
+| Browser/device test matrix | Headless Chromium/Linux passed with 28 voices discovered and three voices generating valid WAVs; Windows Chrome, warm-cache, mobile and low-memory tests pending |
 | Full third-party licensing register | Pending |
 | Fair-use enforcement architecture | Pending |
 | CI workflows and baseline tests | GitHub Actions passing: syntax, 11 unit tests and static validation; automated live Pages Chromium smoke test passed |
+| English multi-voice capability | Verified: 28 active English voices discovered; Adam, Heart and Emma generated valid WAVs in live Pages test |
+| Multilingual voice support | Pending; active Kokoro.js 1.2.1 registry exposes English voices only |
 | Final Phase 1 sign-off | Pending |
 
 ## 15. Recommended immediate next steps
 
 1. Review the initial browser test application and CI workflow committed to the private GitHub repository.
-2. Browser runtime smoke test completed successfully in Codespaces: model and voice loaded, four sentences generated four WAV files, playback and individual/ZIP downloads verified.
-3. Record cold/warm model loading and speech generation measurements on the founder's CPU-only Windows device and at least one additional mainstream browser/device.
+2. Live GitHub Pages Chromium test completed: 28 English voices discovered; Adam, Heart and Emma each generated valid WAVs; individual WAV and ZIP downloads verified.
+3. Record cold/warm model loading and speech generation measurements on the founder's CPU-only Windows device and at least one additional mainstream browser/device; test more voices from the 28-entry English catalogue.
 4. Complete the component-level licensing register and decide how fair-use entitlements will be enforced.
 5. Finalize the MVP architecture and prioritized Phase 2 backlog based on those results.
 

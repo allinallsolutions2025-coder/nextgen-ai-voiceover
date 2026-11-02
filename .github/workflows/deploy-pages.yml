@@ -3,6 +3,14 @@ name: Deploy preview to GitHub Pages
 on:
   push:
     branches: [main]
+    paths:
+      - "index.html"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/build-site.js"
+      - "scripts/check-build.js"
+      - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
 permissions:
