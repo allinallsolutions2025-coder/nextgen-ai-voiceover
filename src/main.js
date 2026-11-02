@@ -30,7 +30,10 @@ const state = {
   tts: null,
   ttsPromise: null,
   jsZipPromise: null,
-  objectUrls: []
+  objectUrls: [],
+  modelLoadMs: null,
+  synthesisMs: null,
+  totalJobMs: null
 };
 
 function setStatus(message, kind = "normal") {
@@ -47,6 +50,21 @@ function setProgress(value) {
 function setBadge(label, kind) {
   elements.modelBadge.textContent = label;
   elements.modelBadge.className = "badge badge-" + kind;
+}
+
+function formatDuration(milliseconds) {
+  if (!Number.isFinite(milliseconds)) return "Not measured";
+  if (milliseconds < 1000) return Math.round(milliseconds) + " ms";
+  return (milliseconds / 1000).toFixed(1) + " seconds";
+}
+
+function updateDiagnostics() {
+  const load = document.querySelector("#modelLoadMetric");
+  const synthesis = document.querySelector("#synthesisMetric");
+  const total = document.querySelector("#totalMetric");
+  if (load) load.textContent = formatDuration(state.modelLoadMs);
+  if (synthesis) synthesis.textContent = formatDuration(state.synthesisMs);
+  if (total) total.textContent = formatDuration(state.totalJobMs);
 }
 
 function revokeObjectUrls() {
@@ -69,12 +87,16 @@ async function getTTS() {
     state.ttsPromise = (async () => {
       setBadge("Loading model", "loading");
       setStatus("Loading Kokoro q8 model in WASM mode. The first download may take several minutes.");
+      const loadStartedAt = performance.now();
       const module = await import(KOKORO_CDN);
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
-      return module.KokoroTTS.from_pretrained(MODEL_ID, {
+      const tts = await module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
         device: "wasm"
       });
+      state.modelLoadMs = performance.now() - loadStartedAt;
+      updateDiagnostics();
+      return tts;
     })().then((tts) => {
       state.tts = tts;
       return tts;
@@ -221,6 +243,9 @@ async function generateAudio() {
   elements.scriptInput.disabled = true;
   setProgress(1);
 
+  const jobStartedAt = performance.now();
+  let synthesisDuration = 0;
+
   try {
     const tts = await getTTS();
     const JSZip = await getJSZip();
@@ -238,7 +263,9 @@ async function generateAudio() {
       setStatus("Generating WAV " + number + " of " + validation.sentences.length + " with " + voice + "…");
       await new Promise((resolve) => setTimeout(resolve, 0));
 
+      const synthesisStartedAt = performance.now();
       const audio = await tts.generate(validation.sentences[index], { voice, speed });
+      synthesisDuration += performance.now() - synthesisStartedAt;
       const wavBlob = await toWavBlob(audio);
       zip.file(filename, wavBlob);
       addAudioResult(filename, wavBlob);
@@ -259,11 +286,17 @@ async function generateAudio() {
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent = validation.sentences.length + " WAV file(s) · " + voice + " · " + speed.toFixed(2) + "×";
     setProgress(100);
+    state.synthesisMs = synthesisDuration;
+    state.totalJobMs = performance.now() - jobStartedAt;
+    updateDiagnostics();
     setStatus("Completed. Preview individual files or download the complete ZIP.", "good");
   } catch (error) {
     console.error(error);
     setProgress(0);
-    setStatus("Generation failed: " + (error?.message || String(error)), "error");
+    state.synthesisMs = synthesisDuration;
+    state.totalJobMs = performance.now() - jobStartedAt;
+    updateDiagnostics();
+    setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed WAV files remain available below.", "error");
     elements.resultsPanel.hidden = elements.audioResults.childElementCount === 0;
   } finally {
     elements.generateButton.disabled = !state.tts;
