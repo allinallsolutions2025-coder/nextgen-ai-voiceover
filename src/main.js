@@ -200,12 +200,12 @@ async function generateSpeechWav(tts, text, options) {
 
   const speechChunks = getSpeechChunks(text);
   if (!speechChunks.length) throw new Error("No speech text was available to generate.");
-  const streamInput = speechChunks.join("\\n");
+  const streamInput = speechChunks.join("\n");
   const waveChunks = [];
   let sampleRate = null;
   let totalSamples = 0;
 
-  for await (const item of tts.stream(streamInput, { ...options, split_pattern: /\\n+/ })) {
+  for await (const item of tts.stream(streamInput, { ...options, split_pattern: /\n+/ })) {
     const raw = item?.audio?.audio;
     const rate = Number(item?.audio?.sampling_rate);
     if (!raw || !ArrayBuffer.isView(raw) || !Number.isFinite(rate)) {

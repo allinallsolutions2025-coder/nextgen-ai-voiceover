@@ -157,7 +157,7 @@ export function validateInput(text, maxCharacters = 20000, maxSegments = 150) {
 }
 
 export function getSpeechChunks(text, maxChunkLength = 350) {
-  const normalized = String(text ?? "").replace(/[\\r\\n]+/g, " ").replace(/\\s+/g, " ").trim();
+  const normalized = String(text ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
   if (!normalized) return [];
   const limit = Math.max(80, Math.floor(Number(maxChunkLength) || 350));
   const result = [];
