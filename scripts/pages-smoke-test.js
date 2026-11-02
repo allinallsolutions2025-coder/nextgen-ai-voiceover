@@ -127,8 +127,8 @@ try {
   const voices = voiceOptions.map(option => option.id);
   report.voiceCount = voices.length;
   report.voiceSample = voiceOptions.slice(0, 12);
-  report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma"].every(id => voices.includes(id));
-  assert(voices.length >= 20, "Expected the registered Kokoro English voice catalogue, but found only " + voices.length + ".");
+  report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma", "bm_george"].every(id => voices.includes(id));
+  assert.equal(voices.length, 28, "Expected all 28 English voices registered by Kokoro.js 1.2.1, but found " + voices.length + ".");
   assert.equal(report.requiredVoicesPresent, true, "One or more expected voice IDs are missing.");
   report.checks.multipleVoicesDiscovered = true;
 
@@ -186,7 +186,7 @@ try {
   assert.equal(wavStats.size, adamWav.sizeBytes, "Individual WAV download size mismatch.");
   report.checks.individualWavDownloadWorks = true;
 
-  for (const voice of ["af_heart", "bf_emma"]) {
+  for (const voice of voices.filter(id => id !== "am_adam")) {
     await page.locator("#voiceSelect").selectOption(voice);
     await page.locator("#scriptInput").fill("This is a real voice-switching test for " + voice + ".");
     await page.locator("#generateButton").click();
@@ -195,9 +195,10 @@ try {
     assert(wav.sizeBytes > 44 && wav.validWav, voice + " did not produce a valid WAV.");
     report.voiceTests.push({ voice, sentenceCount: 1, wav });
   }
-  report.checks.threeVoicesGenerated = report.voiceTests.length === 3;
+  report.checks.allRegisteredVoicesGenerated = report.voiceTests.length === voices.length;
+  assert.equal(report.checks.allRegisteredVoicesGenerated, true, "Not every registered voice produced a valid WAV.");
 
-  const expectedVoiceAssets = ["am_adam", "af_heart", "bf_emma"];
+  const expectedVoiceAssets = voices;
   report.voiceAssetsObserved = report.network.filter(item =>
     expectedVoiceAssets.some(id => item.url.includes("/" + id + ".bin"))
   );
@@ -215,9 +216,9 @@ try {
     Number(item.contentLength || 0) >= 500000 &&
     Number(item.contentLength || 0) <= 550000
   );
-  report.checks.voiceAssetsResolved = report.resolvedVoiceAssetResponses.length >= 3;
+  report.checks.voiceAssetsResolved = report.resolvedVoiceAssetResponses.length >= voices.length;
   assert.equal(report.checks.voiceAssetRequestsObserved, true, "One or more selected voice asset URLs were not requested.");
-  assert.equal(report.checks.voiceAssetsResolved, true, "Expected three successful CDN voice-asset responses.");
+  assert.equal(report.checks.voiceAssetsResolved, true, "Expected successful CDN responses for all 28 voice assets.");
 
   report.timings.synthesisMetric = (await page.locator("#synthesisMetric").innerText()).trim();
   report.timings.totalGenerationMetric = (await page.locator("#totalMetric").innerText()).trim();
