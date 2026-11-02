@@ -330,7 +330,6 @@ async function generateAudio() {
       const wavBlob = await generateSpeechWav(tts, validation.paragraphs[index], { voice, speed });
       paragraphBlobs.push(wavBlob);
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + ".wav";
-      zip.file(filename, wavBlob);
       addAudioResult({
         title: "Paragraph " + paragraphNumber,
         subtitle: validation.paragraphs[index].slice(0, 110) + (validation.paragraphs[index].length > 110 ? "…" : ""),
