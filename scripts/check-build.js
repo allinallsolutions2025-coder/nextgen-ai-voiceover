@@ -19,6 +19,9 @@ const requiredHtmlMarkers = [
   'id="scriptInput"',
   'id="loadButton"',
   'id="generateButton"',
+  'id="modelLoadMetric"',
+  'id="synthesisMetric"',
+  'id="totalMetric"',
   'src="./src/main.js"',
   'href="./src/styles.css"'
 ];
