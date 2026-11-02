@@ -7,21 +7,21 @@ export function cleanCopiedLine(rawLine) {
   let line = String(rawLine ?? "").trim();
   if (!line) return "";
 
-  const wrapped = line.match(/^(["'])([\\s\\S]*)\\1\\s*,?\\s*$/);
+  const wrapped = line.match(/^(["'])([\s\S]*)\1\s*,?\s*$/);
   if (wrapped) line = wrapped[2];
 
   line = line
-    .replace(/\\\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/\\\\U([0-9a-fA-F]{8})/g, (_, hex) => {
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\U([0-9a-fA-F]{8})/g, (_, hex) => {
       const codePoint = parseInt(hex, 16);
       return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : _;
     })
-    .replace(/\\\\([\\\\'"nt])/g, (_, character) => ({
-      "\\\\": "\\\\",
+    .replace(/\\([\\'"nt])/g, (_, character) => ({
+      "\\": "\\",
       "'": "'",
       '"': '"',
-      n: "\\n",
-      t: "\\t"
+      n: "\n",
+      t: "\t"
     })[character]);
 
   return line.trim();
@@ -32,7 +32,7 @@ function isSentencePeriod(line, segmentStart, punctuationIndex, punctuationEnd) 
   const next = line[punctuationEnd] ?? "";
 
   // Keep decimal values such as 3.14 together.
-  if (/\\d/.test(previous) && /\\d/.test(next)) return false;
+  if (/\d/.test(previous) && /\d/.test(next)) return false;
 
   const prefix = line.slice(segmentStart, punctuationIndex);
   const wordMatch = prefix.match(/([A-Za-z]+)$/);
@@ -63,11 +63,11 @@ export function splitLineIntoSentences(line) {
 
       const isPeriod = punctuation === ".";
       if ((!isPeriod || isSentencePeriod(source, start, index, end)) &&
-          (end === source.length || /\\s/.test(source[end]))) {
+          (end === source.length || /\s/.test(source[end]))) {
         const part = source.slice(start, end).trim();
         if (part) parts.push(part);
         start = end;
-        while (start < source.length && /\\s/.test(source[start])) start += 1;
+        while (start < source.length && /\s/.test(source[start])) start += 1;
         index = start;
         continue;
       }
@@ -83,10 +83,10 @@ export function splitLineIntoSentences(line) {
 }
 
 export function getSentences(text) {
-  const normalized = String(text ?? "").replace(/\\r\\n?/g, "\\n");
+  const normalized = String(text ?? "").replace(/\r\n?/g, "\n");
   const result = [];
 
-  for (const rawLine of normalized.split("\\n")) {
+  for (const rawLine of normalized.split("\n")) {
     const line = cleanCopiedLine(rawLine);
     if (line) result.push(...splitLineIntoSentences(line));
   }
