@@ -407,17 +407,17 @@ Phase 1 is complete when these deliverables exist:
 | Local compute capability | CPU-only confirmed by founder |
 | GitHub private repository | Created and access verified |
 | Phase 1 planning document | Prepared; committed separately from application code |
-| Browser performance benchmarks | Pending |
+| Browser performance benchmarks | Initial functional smoke test passed; repeatable cold/warm timing and memory measurements remain pending |
 | Clean browser/device test matrix | Pending |
 | Full third-party licensing register | Pending |
 | Fair-use enforcement architecture | Pending |
-| CI workflows and baseline tests | Initial GitHub Actions CI implemented and passing: syntax, 11 unit tests and static validation; real-model browser test pending |
+| CI workflows and baseline tests | GitHub Actions passing: syntax, 11 unit tests and static validation; real-model browser test separately verified manually |
 | Final Phase 1 sign-off | Pending |
 
 ## 15. Recommended immediate next steps
 
 1. Review the initial browser test application and CI workflow committed to the private GitHub repository.
-2. Run the browser-runtime test over HTTPS or localhost and verify model loading, voice discovery, WAV playback and ZIP export.
+2. Browser runtime smoke test completed successfully in Codespaces: model and voice loaded, four sentences generated four WAV files, playback and individual/ZIP downloads verified.
 3. Record cold/warm model loading and speech generation measurements on the founder's CPU-only Windows device and at least one additional mainstream browser/device.
 4. Complete the component-level licensing register and decide how fair-use entitlements will be enforced.
 5. Finalize the MVP architecture and prioritized Phase 2 backlog based on those results.
