@@ -1,0 +1,52 @@
+name: Test live GitHub Pages app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/pages-smoke-test.yml"
+      - "scripts/pages-smoke-test.js"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-browser-smoke
+  cancel-in-progress: true
+
+jobs:
+  browser-smoke:
+    name: Chromium live-site test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false playwright
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Test published GitHub Pages site
+        env:
+          PAGES_URL: https://allinallsolutions2025-coder.github.io/nextgen-ai-voiceover/
+          REPORT_DIR: artifacts
+        run: node scripts/pages-smoke-test.js
+
+      - name: Upload browser test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-browser-smoke-report
+          path: artifacts/pages-browser-smoke-test.json
+          if-no-files-found: warn
+          retention-days: 14
