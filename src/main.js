@@ -1,16 +1,17 @@
-import { validateInput } from "./lib/text.js";
+import { validateParagraphInput } from "./lib/text.js";
 import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const MAX_CHARACTERS = 20000;
-const MAX_SEGMENTS = 150;
+const MAX_PARAGRAPHS = 100;
 
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
   scriptInput: document.querySelector("#scriptInput"),
   characterCount: document.querySelector("#characterCount"),
+  paragraphCount: document.querySelector("#paragraphCount"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceHelp: document.querySelector("#voiceHelp"),
   speedInput: document.querySelector("#speedInput"),
@@ -31,10 +32,7 @@ const state = {
   tts: null,
   ttsPromise: null,
   jsZipPromise: null,
-  objectUrls: [],
-  modelLoadMs: null,
-  synthesisMs: null,
-  totalJobMs: null
+  objectUrls: []
 };
 
 function setStatus(message, kind = "normal") {
@@ -53,21 +51,6 @@ function setBadge(label, kind) {
   elements.modelBadge.className = "badge badge-" + kind;
 }
 
-function formatDuration(milliseconds) {
-  if (!Number.isFinite(milliseconds)) return "Not measured";
-  if (milliseconds < 1000) return Math.round(milliseconds) + " ms";
-  return (milliseconds / 1000).toFixed(1) + " seconds";
-}
-
-function updateDiagnostics() {
-  const load = document.querySelector("#modelLoadMetric");
-  const synthesis = document.querySelector("#synthesisMetric");
-  const total = document.querySelector("#totalMetric");
-  if (load) load.textContent = formatDuration(state.modelLoadMs);
-  if (synthesis) synthesis.textContent = formatDuration(state.synthesisMs);
-  if (total) total.textContent = formatDuration(state.totalJobMs);
-}
-
 function revokeObjectUrls() {
   for (const url of state.objectUrls) URL.revokeObjectURL(url);
   state.objectUrls = [];
@@ -78,8 +61,16 @@ function clearResults() {
   elements.audioResults.replaceChildren();
   elements.zipDownload.hidden = true;
   elements.zipDownload.removeAttribute("href");
-  elements.resultsSummary.textContent = "Your WAV files will appear here.";
+  elements.resultsSummary.textContent = "Your audio files will appear here.";
   elements.resultsPanel.hidden = true;
+}
+
+function updateScriptCounts() {
+  const value = elements.scriptInput.value;
+  const validation = validateParagraphInput(value, MAX_CHARACTERS, MAX_PARAGRAPHS);
+  const count = validation.paragraphs?.length || 0;
+  elements.characterCount.textContent = value.length.toLocaleString() + " / " + MAX_CHARACTERS.toLocaleString() + " characters";
+  elements.paragraphCount.textContent = count + (count === 1 ? " paragraph" : " paragraphs");
 }
 
 async function getTTS() {
@@ -87,17 +78,13 @@ async function getTTS() {
   if (!state.ttsPromise) {
     state.ttsPromise = (async () => {
       setBadge("Loading model", "loading");
-      setStatus("Loading Kokoro q8 model in WASM mode. The first download may take several minutes.");
-      const loadStartedAt = performance.now();
+      setStatus("Loading the Kokoro voice model into this browser. The first download may take several minutes.");
       const module = await import(KOKORO_CDN);
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
-      const tts = await module.KokoroTTS.from_pretrained(MODEL_ID, {
+      return module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
         device: "wasm"
       });
-      state.modelLoadMs = performance.now() - loadStartedAt;
-      updateDiagnostics();
-      return tts;
     })().then((tts) => {
       state.tts = tts;
       return tts;
@@ -123,12 +110,8 @@ async function getJSZip() {
 }
 
 function populateVoiceSelector(tts) {
-  // In Kokoro.js 1.2.1, list_voices() prints a table but returns nothing.
-  // The supported catalogue is exposed by the read-only tts.voices getter.
   const voices = normalizeVoiceCatalog(tts.voices);
-  if (!voices.length) {
-    throw new Error("Kokoro loaded, but its supported voice catalogue was empty.");
-  }
+  if (!voices.length) throw new Error("Kokoro loaded, but its supported voice catalogue was empty.");
 
   const groups = new Map();
   for (const voice of voices) {
@@ -152,77 +135,101 @@ function populateVoiceSelector(tts) {
   const preferred = voices.some((voice) => voice.id === "am_adam") ? "am_adam" : voices[0].id;
   elements.voiceSelect.value = preferred;
   elements.voiceSelect.disabled = false;
-  elements.voiceHelp.textContent =
-    voices.length + " voices available: " + [...groups.keys()].join(" and ") +
-    ". Each voice file loads when first used and can be cached by your browser.";
+  elements.voiceHelp.textContent = voices.length + " voices · " + [...groups.keys()].join(" and ");
 }
 
 async function loadModel() {
+  if (state.tts) {
+    setBadge("Model ready", "ready");
+    setStatus("Voice model is ready. Choose a voice and generate your script.", "good");
+    return;
+  }
+
   elements.loadButton.disabled = true;
   elements.generateButton.disabled = true;
-
   try {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus("Kokoro is loaded in this browser. Choose a voice and generate a short test script.", "good");
+    setStatus("Voice model ready. Your script can now be generated in this browser.", "good");
     elements.generateButton.disabled = false;
     setProgress(100);
   } catch (error) {
     console.error(error);
     setBadge("Model load failed", "error");
-    setStatus("Could not load Kokoro: " + (error?.message || String(error)) + ". Check the connection and refresh to retry.", "error");
+    setStatus("Could not load the voice model: " + (error?.message || String(error)) + ". Check your connection and try again.", "error");
     setProgress(0);
-    state.ttsPromise = null;
   } finally {
     elements.loadButton.disabled = false;
   }
 }
 
-function toWavBlob(audio) {
+async function toWavBlob(audio) {
   if (!audio || typeof audio.toWav !== "function") {
     throw new Error("The audio result did not provide WAV data.");
   }
-
-  return Promise.resolve(audio.toWav()).then(async (value) => {
-    if (value instanceof Blob) return value;
-    if (value instanceof ArrayBuffer) return new Blob([value], { type: "audio/wav" });
-    if (ArrayBuffer.isView(value)) {
-      return new Blob([value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)], { type: "audio/wav" });
-    }
-    throw new Error("The voice engine returned an unsupported WAV data type.");
-  });
+  const value = await audio.toWav();
+  if (value instanceof Blob) return value;
+  if (value instanceof ArrayBuffer) return new Blob([value], { type: "audio/wav" });
+  if (ArrayBuffer.isView(value)) {
+    return new Blob([value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)], { type: "audio/wav" });
+  }
+  throw new Error("The voice engine returned an unsupported WAV data type.");
 }
 
-function addAudioResult(filename, blob) {
+function addAudioResult({ title, subtitle, filename, blob, kind, index }) {
   const url = URL.createObjectURL(blob);
   state.objectUrls.push(url);
 
-  const row = document.createElement("div");
-  row.className = "audio-row";
+  const card = document.createElement("article");
+  card.className = "audio-card" + (kind === "full" ? " audio-card-full" : " audio-card-paragraph");
+  if (kind === "full") {
+    card.id = "fullScriptAudio";
+    card.dataset.testid = "full-script-audio";
+  } else {
+    card.classList.add("paragraph-audio-card");
+    card.dataset.paragraphIndex = String(index);
+  }
 
-  const name = document.createElement("span");
-  name.className = "audio-name";
-  name.textContent = filename;
+  const cardHeading = document.createElement("div");
+  cardHeading.className = "audio-card-heading";
+  const titleGroup = document.createElement("div");
+  const titleElement = document.createElement("strong");
+  titleElement.className = "audio-card-title";
+  titleElement.textContent = title;
+  const subtitleElement = document.createElement("span");
+  subtitleElement.className = "audio-card-subtitle";
+  subtitleElement.textContent = subtitle;
+  titleGroup.append(titleElement, subtitleElement);
+
+  const format = document.createElement("span");
+  format.className = "format-tag";
+  format.textContent = "WAV";
+  cardHeading.append(titleGroup, format);
 
   const player = document.createElement("audio");
   player.controls = true;
   player.preload = "none";
   player.src = url;
-  player.setAttribute("aria-label", "Preview " + filename);
+  player.setAttribute("aria-label", "Preview " + title);
+  player.className = "audio-player";
 
   const download = document.createElement("a");
   download.className = "audio-download";
   download.href = url;
   download.download = filename;
-  download.textContent = "Download WAV";
+  download.textContent = "↓ Download WAV";
+  if (kind === "full") download.id = "fullScriptDownload";
+  else download.dataset.paragraphDownloadIndex = String(index);
 
-  row.append(name, player, download);
-  elements.audioResults.append(row);
+  card.append(cardHeading, player, download);
+  if (kind === "full") elements.audioResults.prepend(card);
+  else elements.audioResults.append(card);
 }
 
 async function generateAudio() {
-  const validation = validateInput(elements.scriptInput.value, MAX_CHARACTERS, MAX_SEGMENTS);
+  const script = elements.scriptInput.value.trim();
+  const validation = validateParagraphInput(script, MAX_CHARACTERS, MAX_PARAGRAPHS);
   if (!validation.valid) {
     setStatus(validation.message, "error");
     return;
@@ -232,72 +239,102 @@ async function generateAudio() {
   elements.generateButton.disabled = true;
   elements.loadButton.disabled = true;
   elements.scriptInput.disabled = true;
+  elements.voiceSelect.disabled = true;
+  elements.speedInput.disabled = true;
   setProgress(1);
 
-  const jobStartedAt = performance.now();
-  let synthesisDuration = 0;
+  const paragraphBlobs = [];
+  const scriptForSpeech = validation.paragraphs.join("\n\n");
 
   try {
     const tts = await getTTS();
+    if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
+    setBadge("Model ready", "ready");
     const JSZip = await getJSZip();
     const zip = new JSZip();
-
     const voice = elements.voiceSelect.value || "am_adam";
     const speed = Number(elements.speedInput.value);
+    const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
+    let completedJobs = 0;
 
-    for (let index = 0; index < validation.sentences.length; index += 1) {
-      const number = index + 1;
-      const filename = "s" + String(number).padStart(3, "0") + ".wav";
-      const percentage = 5 + (index / validation.sentences.length) * 90;
-
-      setProgress(percentage);
-      setStatus("Generating WAV " + number + " of " + validation.sentences.length + " with " + voice + "…");
+    for (let index = 0; index < validation.paragraphs.length; index += 1) {
+      const paragraphNumber = index + 1;
+      setProgress(5 + (completedJobs / jobCount) * 88);
+      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + "…");
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const synthesisStartedAt = performance.now();
-      const audio = await tts.generate(validation.sentences[index], { voice, speed });
-      synthesisDuration += performance.now() - synthesisStartedAt;
+      const audio = await tts.generate(validation.paragraphs[index], { voice, speed });
       const wavBlob = await toWavBlob(audio);
+      paragraphBlobs.push(wavBlob);
+      const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + ".wav";
       zip.file(filename, wavBlob);
-      addAudioResult(filename, wavBlob);
+      addAudioResult({
+        title: "Paragraph " + paragraphNumber,
+        subtitle: validation.paragraphs[index].slice(0, 110) + (validation.paragraphs[index].length > 110 ? "…" : ""),
+        filename,
+        blob: wavBlob,
+        kind: "paragraph",
+        index: paragraphNumber
+      });
+      completedJobs += 1;
+      setProgress(5 + (completedJobs / jobCount) * 88);
     }
 
-    setStatus("Packaging " + validation.sentences.length + " WAV file(s) into a ZIP…");
-    setProgress(97);
+    let fullScriptBlob;
+    if (paragraphBlobs.length === 1) {
+      // A one-paragraph script is already the complete voiceover; reuse its audio.
+      fullScriptBlob = paragraphBlobs[0];
+    } else {
+      setStatus("Generating one continuous voiceover for the complete script…");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const fullScriptAudio = await tts.generate(scriptForSpeech, { voice, speed });
+      fullScriptBlob = await toWavBlob(fullScriptAudio);
+      completedJobs += 1;
+      setProgress(5 + (completedJobs / jobCount) * 88);
+    }
+
+    zip.file("full_script.wav", fullScriptBlob);
+    addAudioResult({
+      title: "Full script voiceover",
+      subtitle: validation.paragraphs.length + " paragraph(s) · " + voice + " · " + speed.toFixed(2) + "×",
+      filename: "full_script.wav",
+      blob: fullScriptBlob,
+      kind: "full"
+    });
+
+    setStatus("Packaging the full-script and paragraph WAV files…");
+    setProgress(96);
     const zipBlob = await zip.generateAsync({
       type: "blob",
       compression: "DEFLATE",
       compressionOptions: { level: 3 }
     });
-
     const zipUrl = URL.createObjectURL(zipBlob);
     state.objectUrls.push(zipUrl);
     elements.zipDownload.href = zipUrl;
     elements.zipDownload.hidden = false;
     elements.resultsPanel.hidden = false;
-    elements.resultsSummary.textContent = validation.sentences.length + " WAV file(s) · " + voice + " · " + speed.toFixed(2) + "×";
+    elements.resultsSummary.textContent =
+      "Full script voiceover + " + validation.paragraphs.length + " paragraph WAV file(s) · " + voice + " · " + speed.toFixed(2) + "×";
     setProgress(100);
-    state.synthesisMs = synthesisDuration;
-    state.totalJobMs = performance.now() - jobStartedAt;
-    updateDiagnostics();
-    setStatus("Completed. Preview individual files or download the complete ZIP.", "good");
+    setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete WAV bundle.", "good");
   } catch (error) {
     console.error(error);
     setProgress(0);
-    state.synthesisMs = synthesisDuration;
-    state.totalJobMs = performance.now() - jobStartedAt;
-    updateDiagnostics();
-    setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed WAV files remain available below.", "error");
+    setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed paragraph WAV files remain available below.", "error");
     elements.resultsPanel.hidden = elements.audioResults.childElementCount === 0;
   } finally {
     elements.generateButton.disabled = !state.tts;
     elements.loadButton.disabled = false;
     elements.scriptInput.disabled = false;
+    elements.voiceSelect.disabled = !state.tts;
+    elements.speedInput.disabled = false;
   }
 }
 
 elements.scriptInput.addEventListener("input", () => {
-  elements.characterCount.textContent = elements.scriptInput.value.length.toLocaleString() + " / " + MAX_CHARACTERS.toLocaleString();
+  updateScriptCounts();
+  clearResults();
 });
 
 elements.speedInput.addEventListener("input", () => {
@@ -309,11 +346,13 @@ elements.generateButton.addEventListener("click", generateAudio);
 
 elements.clearButton.addEventListener("click", () => {
   elements.scriptInput.value = "";
-  elements.characterCount.textContent = "0 / " + MAX_CHARACTERS.toLocaleString();
+  updateScriptCounts();
   clearResults();
-  setStatus("Text cleared. The loaded model remains available in this tab.");
+  setStatus("Script cleared. The loaded voice model remains ready in this tab.");
   setProgress(0);
 });
+
+updateScriptCounts();
 
 if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
   setStatus("Open this app over HTTPS or localhost for browser model compatibility.", "error");

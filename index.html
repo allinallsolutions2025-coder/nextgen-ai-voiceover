@@ -4,107 +4,145 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="A browser-based Kokoro text-to-speech test application for NextGen AI Voiceover.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230f766e%27/%3E%3Ctext x=%2732%27 y=%2745%27 font-size=%2742%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27Arial%27%3EN%3C/text%3E%3C/svg%3E">
-  <title>NextGen AI Voiceover — Browser Runtime Test</title>
+  <meta name="description" content="Create paragraph-by-paragraph and full-script voiceovers with NextGen AI Voiceover, powered by Kokoro in your browser.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%237c5cff%27/%3E%3Cpath d=%27M20 18h7l10 17V18h7v28h-7L27 29v17h-7z%27 fill=%27white%27/%3E%3C/svg%3E">
+  <title>NextGen AI Voiceover — Voiceover Studio</title>
   <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
       <a class="brand" href="./" aria-label="NextGen AI Voiceover home">
         <span class="brand-mark" aria-hidden="true">N</span>
-        <span>
-          <strong>NextGen AI Voiceover</strong>
-          <small>Browser runtime test</small>
-        </span>
+        <span class="brand-copy"><strong>NextGen</strong><small>AI VOICEOVER</small></span>
       </a>
-      <span id="modelBadge" class="badge badge-idle">Model not loaded</span>
-    </header>
 
-    <section class="intro">
-      <p class="eyebrow">KOKORO · ONNX · WASM</p>
-      <h1>Turn text into voice.</h1>
-      <p class="intro-copy">A first browser-based test of Kokoro speech generation. Model inference runs in this browser; your text is not sent to a NextGen AI Voiceover server by this prototype.</p>
-    </section>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="main-nav">
+        <a class="nav-item active" href="#studio" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">▤</span>
+          <span>Text to Speech</span>
+        </a>
+        <span class="nav-item nav-item-muted" aria-disabled="true" title="Coming later">
+          <span class="nav-icon" aria-hidden="true">◷</span>
+          <span>Projects &amp; history</span>
+          <span class="nav-soon">Soon</span>
+        </span>
+      </nav>
 
-    <section class="panel" aria-labelledby="scriptHeading">
-      <div class="section-heading">
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-model">
+        <span class="sidebar-model-dot"></span>
+        <div><strong>Browser engine</strong><small>Kokoro · ONNX · WASM</small></div>
+      </div>
+      <div class="sidebar-footer">NEXTGEN AI VOICEOVER <span>EARLY ACCESS</span></div>
+    </aside>
+
+    <main class="workspace" id="studio">
+      <header class="topbar">
+        <div class="breadcrumb"><span>Workspace</span><span class="crumb-separator">/</span><strong>Text to Speech</strong></div>
+        <div class="topbar-status">
+          <span class="engine-label"><span class="engine-dot"></span> Local generation</span>
+          <span id="modelBadge" class="badge badge-idle">Model not loaded</span>
+        </div>
+      </header>
+
+      <section class="page-heading">
         <div>
-          <h2 id="scriptHeading">Your script</h2>
-          <p>Paste a paragraph or one sentence per line.</p>
+          <p class="eyebrow">VOICEOVER STUDIO</p>
+          <h1>Text to Speech</h1>
+          <p class="page-subtitle">Turn your script into natural-sounding speech. Generate each paragraph separately or create one voiceover for the complete script.</p>
         </div>
-        <span id="characterCount" class="counter">0 / 20,000</span>
-      </div>
+        <div class="format-pill"><span class="format-wave" aria-hidden="true">≋</span> WAV output</div>
+      </section>
 
-      <label class="sr-only" for="scriptInput">Text to convert to speech</label>
-      <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Type or paste your script here..."></textarea>
-      <div class="hint-row">
-        <span>Maximum 20,000 characters and 150 sentence files per batch.</span>
-        <button id="clearButton" class="text-button" type="button">Clear text</button>
-      </div>
+      <section class="studio-grid">
+        <div class="editor-column">
+          <section class="panel script-panel" aria-labelledby="scriptHeading">
+            <div class="panel-heading">
+              <div>
+                <h2 id="scriptHeading">Script</h2>
+                <p>Write or paste your narration below. Use a blank line to start a new paragraph.</p>
+              </div>
+              <button id="clearButton" class="quiet-button" type="button">Clear script</button>
+            </div>
 
-      <div class="settings">
-        <div class="field">
-          <label for="voiceSelect">Voice</label>
-          <select id="voiceSelect" disabled>
-            <option value="am_adam">Adam (am_adam)</option>
-          </select>
-          <small id="voiceHelp">Load the model to retrieve its available voice list.</small>
+            <label class="sr-only" for="scriptInput">Voiceover script</label>
+            <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Start writing your voiceover here...&#10;&#10;Separate paragraphs with a blank line. Each paragraph can be generated as its own WAV, and the complete script can be rendered as one voiceover."></textarea>
+
+            <div class="editor-footer">
+              <span id="paragraphCount">0 paragraphs</span>
+              <span class="footer-divider">·</span>
+              <span id="characterCount">0 / 20,000 characters</span>
+              <span class="editor-spacer"></span>
+              <span>Up to 20,000 characters</span>
+            </div>
+          </section>
+
+          <section id="resultsPanel" class="panel results-panel" aria-labelledby="resultsHeading" hidden>
+            <div class="panel-heading result-heading">
+              <div>
+                <p class="eyebrow">GENERATED AUDIO</p>
+                <h2 id="resultsHeading">Your voiceover</h2>
+                <p id="resultsSummary">Your audio files will appear here.</p>
+              </div>
+              <a id="zipDownload" class="button button-secondary zip-button" href="#" download="nextgen-voiceover-audio.zip" hidden>Download all WAVs <span aria-hidden="true">↓</span></a>
+            </div>
+            <div id="audioResults" class="audio-results"></div>
+          </section>
+
+          <div class="privacy-note"><span aria-hidden="true">◈</span> Your script is processed in this browser. It is not uploaded to a NextGen AI Voiceover server.</div>
         </div>
-        <div class="field speed-field">
-          <div class="range-heading">
-            <label for="speedInput">Speech speed</label>
-            <output id="speedValue" for="speedInput">0.95×</output>
-          </div>
-          <input id="speedInput" type="range" min="0.80" max="1.20" step="0.05" value="0.95">
-          <small>Initial test range: 0.80×–1.20×.</small>
-        </div>
-      </div>
 
-      <div class="actions">
-        <button id="loadButton" class="button button-secondary" type="button">Load voice model</button>
-        <button id="generateButton" class="button button-primary" type="button" disabled>Generate WAV files</button>
-      </div>
+        <aside class="settings-column" aria-label="Voice and generation settings">
+          <section class="panel settings-panel">
+            <div class="settings-title">
+              <div><p class="eyebrow">CONFIGURE</p><h2>Voice settings</h2></div>
+              <span class="settings-spark" aria-hidden="true">✳</span>
+            </div>
 
-      <div class="progress-wrap" aria-live="polite">
-        <div class="progress-track" role="progressbar" aria-label="Generation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
-          <div id="progressBar" class="progress-bar"></div>
-        </div>
-        <p id="statusMessage" class="status" role="status">Ready. Load the Kokoro model to begin.</p>
-      </div>
-    </section>
+            <div class="field">
+              <label for="voiceSelect">Voice</label>
+              <select id="voiceSelect" disabled>
+                <option value="am_adam">Adam (am_adam)</option>
+              </select>
+              <small id="voiceHelp">Load the voice engine to browse available voices.</small>
+            </div>
 
-    <section class="panel metrics-panel" aria-labelledby="metricsHeading">
-      <div class="section-heading">
-        <div>
-          <h2 id="metricsHeading">Performance diagnostics</h2>
-          <p>Timing measured locally in this browser. Download transfer size is not inferred.</p>
-        </div>
-      </div>
-      <dl class="metrics-grid">
-        <div><dt>Model load</dt><dd id="modelLoadMetric">Not measured</dd></div>
-        <div><dt>Audio synthesis</dt><dd id="synthesisMetric">Not measured</dd></div>
-        <div><dt>Total generation + ZIP</dt><dd id="totalMetric">Not measured</dd></div>
-      </dl>
-    </section>
+            <div class="field speed-setting">
+              <div class="range-heading"><label for="speedInput">Speed</label><output id="speedValue" for="speedInput">0.95×</output></div>
+              <input id="speedInput" type="range" min="0.80" max="1.20" step="0.05" value="0.95">
+              <div class="range-ends"><span>Slower</span><span>Faster</span></div>
+            </div>
 
-    <section id="resultsPanel" class="panel results-panel" aria-labelledby="resultsHeading" hidden>
-      <div class="section-heading">
-        <div>
-          <h2 id="resultsHeading">Generated audio</h2>
-          <p id="resultsSummary">Your WAV files will appear here.</p>
-        </div>
-        <a id="zipDownload" class="button button-primary download-button" href="#" download="nextgen-voiceover-wavs.zip" hidden>Download ZIP</a>
-      </div>
-      <div id="audioResults" class="audio-results"></div>
-    </section>
+            <div class="settings-divider"></div>
+            <div class="output-setting">
+              <div><strong>Output format</strong><small>Audio file format</small></div>
+              <span class="format-tag">WAV</span>
+            </div>
+            <div class="output-setting">
+              <div><strong>Generation mode</strong><small>Paragraphs + full script</small></div>
+              <span class="local-tag"><span></span> Local</span>
+            </div>
 
-    <footer>
-      <p>Development prototype · Kokoro.js 1.2.1 · ONNX q8 · WASM</p>
-      <p>Model assets are fetched from the configured Hugging Face model repository and may be cached by your browser. Cache retention is controlled by the browser.</p>
-    </footer>
-  </main>
+            <button id="loadButton" class="button button-secondary load-button" type="button">Load voice model</button>
+            <button id="generateButton" class="button button-primary generate-button" type="button" disabled>
+              <span aria-hidden="true">✦</span> Generate voiceover
+            </button>
+
+            <div class="progress-wrap" aria-live="polite">
+              <div class="progress-track" role="progressbar" aria-label="Generation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+                <div id="progressBar" class="progress-bar"></div>
+              </div>
+              <p id="statusMessage" class="status" role="status">Load the voice model to get started.</p>
+            </div>
+          </section>
+
+          <div class="settings-footnote">Powered by Kokoro 82M · ONNX q8 · WebAssembly. First-time model and voice downloads may take a little longer.</div>
+        </aside>
+      </section>
+    </main>
+  </div>
 
   <script type="module" src="./src/main.js"></script>
 </body>
