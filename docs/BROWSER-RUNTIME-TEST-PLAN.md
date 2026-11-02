@@ -146,3 +146,22 @@ A Chrome HAR was supplied for the Codespaces preview at `https://turbo-space-yod
 5. Screenshot the Performance diagnostics panel after generation.
 
 The missing favicon request is fixed by adding an inline SVG data URL to the page head, avoiding an extra file and network request.
+
+
+## Automated live Pages test — 2026-11-02
+
+A real Playwright Chromium smoke test against the published GitHub Pages URL passed:
+- HTTP 200 and application shell loaded over HTTPS.
+- Kokoro q8/ONNX model loaded in 5.64 seconds on the GitHub-hosted Linux runner.
+- Runtime returned one voice, `am_adam`.
+- Two-sentence test produced two WAV rows.
+- First WAV blob had a valid RIFF/WAVE header (424,844 bytes).
+- ZIP had a valid ZIP signature; actual browser download completed at 843,805 bytes and matched the generated ZIP blob.
+- Synthesis diagnostic: 23.0 seconds; total generation + ZIP: 23.2 seconds.
+- Zero page errors or failed network requests were recorded.
+
+The test fetched the quantized ONNX model (92,361,116-byte CDN response), Transformers.js WASM (2,988,171 bytes), and the Adam ONNX voice file (522,240 bytes). These are response content lengths, not a total traffic measurement.
+
+**Interpretation:** this is a fresh Playwright browser-context result on a GitHub-hosted Linux machine, not a benchmark of the founder's Windows PC and not evidence of warm-cache persistence. See [the detailed test report](reports/2026-11-02-pages-browser-smoke-test.md).
+
+**New issue to resolve:** the browser runtime exposes only `am_adam` in this test. Multi-voice support remains unverified; native `.pt` assets must not be assumed compatible with browser ONNX voice files.

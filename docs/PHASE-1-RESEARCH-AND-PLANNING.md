@@ -407,11 +407,11 @@ Phase 1 is complete when these deliverables exist:
 | Local compute capability | CPU-only confirmed by founder |
 | GitHub private repository | Created and access verified |
 | Phase 1 planning document | Prepared; committed separately from application code |
-| Browser performance benchmarks | Initial functional smoke test passed; repeatable cold/warm timing and memory measurements remain pending |
-| Clean browser/device test matrix | Pending |
+| Browser performance benchmarks | Live Pages Chromium smoke test passed: model 5.64 s, two-sentence synthesis 23.0 s on GitHub runner; founder-PC timing, warm-cache and memory benchmarks pending |
+| Clean browser/device test matrix | One headless Chromium/Linux run passed; Windows Chrome, warm-cache, mobile and low-memory device tests pending |
 | Full third-party licensing register | Pending |
 | Fair-use enforcement architecture | Pending |
-| CI workflows and baseline tests | GitHub Actions passing: syntax, 11 unit tests and static validation; real-model browser test separately verified manually |
+| CI workflows and baseline tests | GitHub Actions passing: syntax, 11 unit tests and static validation; automated live Pages Chromium smoke test passed |
 | Final Phase 1 sign-off | Pending |
 
 ## 15. Recommended immediate next steps
