@@ -1,0 +1,15 @@
+{
+  "name": "nextgen-ai-voiceover",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-first Kokoro text-to-speech prototype for NextGen AI Voiceover",
+  "scripts": {
+    "check": "node --check src/main.js && node --check src/lib/text.js && node --check scripts/check-build.js",
+    "test": "node --test",
+    "build": "node scripts/check-build.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

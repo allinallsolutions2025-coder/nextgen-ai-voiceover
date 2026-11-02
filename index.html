@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A browser-based Kokoro text-to-speech test application for NextGen AI Voiceover.">
+  <title>NextGen AI Voiceover — Browser Runtime Test</title>
+  <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="NextGen AI Voiceover home">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <span>
+          <strong>NextGen AI Voiceover</strong>
+          <small>Browser runtime test</small>
+        </span>
+      </a>
+      <span id="modelBadge" class="badge badge-idle">Model not loaded</span>
+    </header>
+
+    <section class="intro">
+      <p class="eyebrow">KOKORO · ONNX · WASM</p>
+      <h1>Turn text into voice.</h1>
+      <p class="intro-copy">A first browser-based test of Kokoro speech generation. Model inference runs in this browser; your text is not sent to a NextGen AI Voiceover server by this prototype.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="scriptHeading">
+      <div class="section-heading">
+        <div>
+          <h2 id="scriptHeading">Your script</h2>
+          <p>Paste a paragraph or one sentence per line.</p>
+        </div>
+        <span id="characterCount" class="counter">0 / 20,000</span>
+      </div>
+
+      <label class="sr-only" for="scriptInput">Text to convert to speech</label>
+      <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Type or paste your script here..."></textarea>
+      <div class="hint-row">
+        <span>Maximum 20,000 characters and 150 sentence files per batch.</span>
+        <button id="clearButton" class="text-button" type="button">Clear text</button>
+      </div>
+
+      <div class="settings">
+        <div class="field">
+          <label for="voiceSelect">Voice</label>
+          <select id="voiceSelect" disabled>
+            <option value="am_adam">Adam (am_adam)</option>
+          </select>
+          <small id="voiceHelp">Load the model to retrieve its available voice list.</small>
+        </div>
+        <div class="field speed-field">
+          <div class="range-heading">
+            <label for="speedInput">Speech speed</label>
+            <output id="speedValue" for="speedInput">0.95×</output>
+          </div>
+          <input id="speedInput" type="range" min="0.80" max="1.20" step="0.05" value="0.95">
+          <small>Initial test range: 0.80×–1.20×.</small>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="loadButton" class="button button-secondary" type="button">Load voice model</button>
+        <button id="generateButton" class="button button-primary" type="button" disabled>Generate WAV files</button>
+      </div>
+
+      <div class="progress-wrap" aria-live="polite">
+        <div class="progress-track" role="progressbar" aria-label="Generation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <p id="statusMessage" class="status" role="status">Ready. Load the Kokoro model to begin.</p>
+      </div>
+    </section>
+
+    <section id="resultsPanel" class="panel results-panel" aria-labelledby="resultsHeading" hidden>
+      <div class="section-heading">
+        <div>
+          <h2 id="resultsHeading">Generated audio</h2>
+          <p id="resultsSummary">Your WAV files will appear here.</p>
+        </div>
+        <a id="zipDownload" class="button button-primary download-button" href="#" download="nextgen-voiceover-wavs.zip" hidden>Download ZIP</a>
+      </div>
+      <div id="audioResults" class="audio-results"></div>
+    </section>
+
+    <footer>
+      <p>Development prototype · Kokoro.js 1.2.1 · ONNX q8 · WASM</p>
+      <p>Model assets are fetched from the configured Hugging Face model repository and may be cached by your browser. Cache retention is controlled by the browser.</p>
+    </footer>
+  </main>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

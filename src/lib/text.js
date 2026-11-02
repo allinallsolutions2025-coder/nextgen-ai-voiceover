@@ -1,0 +1,128 @@
+const ABBREVIATIONS = new Set([
+  "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs",
+  "etc", "e.g", "i.e", "fig", "no", "dept", "est"
+]);
+
+export function cleanCopiedLine(rawLine) {
+  let line = String(rawLine ?? "").trim();
+  if (!line) return "";
+
+  const wrapped = line.match(/^(["'])([\\s\\S]*)\\1\\s*,?\\s*$/);
+  if (wrapped) line = wrapped[2];
+
+  line = line
+    .replace(/\\\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\\\U([0-9a-fA-F]{8})/g, (_, hex) => {
+      const codePoint = parseInt(hex, 16);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : _;
+    })
+    .replace(/\\\\([\\\\'"nt])/g, (_, character) => ({
+      "\\\\": "\\\\",
+      "'": "'",
+      '"': '"',
+      n: "\\n",
+      t: "\\t"
+    })[character]);
+
+  return line.trim();
+}
+
+function isSentencePeriod(line, segmentStart, punctuationIndex, punctuationEnd) {
+  const previous = line[punctuationIndex - 1] ?? "";
+  const next = line[punctuationEnd] ?? "";
+
+  // Keep decimal values such as 3.14 together.
+  if (/\\d/.test(previous) && /\\d/.test(next)) return false;
+
+  const prefix = line.slice(segmentStart, punctuationIndex);
+  const wordMatch = prefix.match(/([A-Za-z]+)$/);
+  const precedingWord = wordMatch?.[1]?.toLowerCase();
+
+  if (precedingWord && ABBREVIATIONS.has(precedingWord)) return false;
+
+  // Avoid splitting initials such as "A. Smith".
+  if (precedingWord?.length === 1 && /[A-Z]/.test(next)) return false;
+
+  return true;
+}
+
+export function splitLineIntoSentences(line) {
+  const source = String(line ?? "");
+  const parts = [];
+  const closers = new Set(['"', "”", "’", "'", ")", "]", "}", "»"]);
+  let start = 0;
+  let index = 0;
+
+  while (index < source.length) {
+    const punctuation = source[index];
+
+    if (".!?".includes(punctuation)) {
+      let end = index + 1;
+      while (end < source.length && ".!?".includes(source[end])) end += 1;
+      while (end < source.length && closers.has(source[end])) end += 1;
+
+      const isPeriod = punctuation === ".";
+      if ((!isPeriod || isSentencePeriod(source, start, index, end)) &&
+          (end === source.length || /\\s/.test(source[end]))) {
+        const part = source.slice(start, end).trim();
+        if (part) parts.push(part);
+        start = end;
+        while (start < source.length && /\\s/.test(source[start])) start += 1;
+        index = start;
+        continue;
+      }
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+
+  const remainder = source.slice(start).trim();
+  if (remainder) parts.push(remainder);
+  return parts;
+}
+
+export function getSentences(text) {
+  const normalized = String(text ?? "").replace(/\\r\\n?/g, "\\n");
+  const result = [];
+
+  for (const rawLine of normalized.split("\\n")) {
+    const line = cleanCopiedLine(rawLine);
+    if (line) result.push(...splitLineIntoSentences(line));
+  }
+
+  return result;
+}
+
+export function validateInput(text, maxCharacters = 20000, maxSegments = 150) {
+  const value = String(text ?? "").trim();
+
+  if (!value) {
+    return { valid: false, code: "empty", message: "Paste some text before generating audio.", sentences: [] };
+  }
+
+  if (value.length > maxCharacters) {
+    return {
+      valid: false,
+      code: "too_many_characters",
+      message: "Please keep the text within " + maxCharacters.toLocaleString() + " characters.",
+      sentences: []
+    };
+  }
+
+  const sentences = getSentences(value);
+  if (!sentences.length) {
+    return { valid: false, code: "no_sentences", message: "No sentence text was found.", sentences: [] };
+  }
+
+  if (sentences.length > maxSegments) {
+    return {
+      valid: false,
+      code: "too_many_segments",
+      message: "This text creates " + sentences.length + " audio files. The limit is " + maxSegments + ".",
+      sentences
+    };
+  }
+
+  return { valid: true, code: "ok", message: "", sentences };
+}
