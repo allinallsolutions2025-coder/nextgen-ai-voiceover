@@ -125,3 +125,12 @@ footer p { margin: 4px 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+.metrics-panel { margin-top: 18px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.metrics-grid div { padding: 13px; border: 1px solid #2b3e58; border-radius: 10px; background: #0a1525; }
+.metrics-grid dt { color: var(--muted); font-size: 11px; }
+.metrics-grid dd { margin: 7px 0 0; color: #9ff1cf; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (max-width: 680px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+}
