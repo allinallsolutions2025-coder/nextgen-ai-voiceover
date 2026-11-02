@@ -31,6 +31,7 @@ const elements = {
 const state = {
   tts: null,
   ttsPromise: null,
+  TextSplitterStream: null,
   jsZipPromise: null,
   objectUrls: []
 };
@@ -81,6 +82,8 @@ async function getTTS() {
       setStatus("Loading the Kokoro voice model into this browser. The first download may take several minutes.");
       const module = await import(KOKORO_CDN);
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
+      if (!module.TextSplitterStream) throw new Error("The selected Kokoro.js module does not expose TextSplitterStream.");
+      state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
         device: "wasm"
@@ -200,12 +203,16 @@ async function generateSpeechWav(tts, text, options) {
 
   const speechChunks = getSpeechChunks(text);
   if (!speechChunks.length) throw new Error("No speech text was available to generate.");
-  const streamInput = speechChunks.join("\n");
+  if (!state.TextSplitterStream) throw new Error("Kokoro's streaming text splitter is unavailable.");
+  const splitter = new state.TextSplitterStream();
+  for (const chunk of speechChunks) splitter.push(chunk + " ");
+  splitter.close();
+
   const waveChunks = [];
   let sampleRate = null;
   let totalSamples = 0;
 
-  for await (const item of tts.stream(streamInput, { ...options, split_pattern: /\n+/ })) {
+  for await (const item of tts.stream(splitter, options)) {
     const raw = item?.audio?.audio;
     const rate = Number(item?.audio?.sampling_rate);
     if (!raw || !ArrayBuffer.isView(raw) || !Number.isFinite(rate)) {
@@ -309,8 +316,6 @@ async function generateAudio() {
     const tts = await getTTS();
     if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    const JSZip = await getJSZip();
-    const zip = new JSZip();
     const voice = elements.voiceSelect.value || "am_adam";
     const speed = Number(elements.speedInput.value);
     const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
@@ -361,6 +366,12 @@ async function generateAudio() {
 
     setStatus("Packaging the full-script and paragraph WAV files…");
     setProgress(96);
+    const JSZip = await getJSZip();
+    const zip = new JSZip();
+    for (let index = 0; index < paragraphBlobs.length; index += 1) {
+      zip.file("paragraph_" + String(index + 1).padStart(3, "0") + ".wav", paragraphBlobs[index]);
+    }
+    zip.file("full_script.wav", fullScriptBlob);
     const zipBlob = await zip.generateAsync({
       type: "blob",
       compression: "DEFLATE",
