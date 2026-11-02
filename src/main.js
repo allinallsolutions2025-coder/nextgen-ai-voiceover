@@ -1,4 +1,4 @@
-import { getSentences, validateInput } from "./lib/text.js";
+import { validateInput } from "./lib/text.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
