@@ -411,16 +411,16 @@ Phase 1 is complete when these deliverables exist:
 | Clean browser/device test matrix | Pending |
 | Full third-party licensing register | Pending |
 | Fair-use enforcement architecture | Pending |
-| CI workflows and baseline tests | Pending |
+| CI workflows and baseline tests | Initial GitHub Actions CI implemented and passing: syntax, 11 unit tests and static validation; real-model browser test pending |
 | Final Phase 1 sign-off | Pending |
 
 ## 15. Recommended immediate next steps
 
-1. Commit and review this Phase 1 document in the private GitHub repository.
-2. Set up a baseline GitHub Actions workflow for lint, unit tests and production build.
-3. Create a small browser-runtime spike that verifies the selected ONNX quantized model and voice load path without adding accounts or payment code.
-4. Run repeatable tests to measure cold/warm loading and speech generation on the founder's CPU-only Windows device and at least one mainstream browser environment.
-5. Finalize the MVP architecture and Phase 2 backlog based on those results.
+1. Review the initial browser test application and CI workflow committed to the private GitHub repository.
+2. Run the browser-runtime test over HTTPS or localhost and verify model loading, voice discovery, WAV playback and ZIP export.
+3. Record cold/warm model loading and speech generation measurements on the founder's CPU-only Windows device and at least one additional mainstream browser/device.
+4. Complete the component-level licensing register and decide how fair-use entitlements will be enforced.
+5. Finalize the MVP architecture and prioritized Phase 2 backlog based on those results.
 
 ---
 
