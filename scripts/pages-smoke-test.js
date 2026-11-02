@@ -210,7 +210,7 @@ try {
     )
   );
   report.resolvedVoiceAssetResponses = report.network.filter(item =>
-    /cdn\\.hf\\.co/.test(item.url) &&
+    /cdn\.hf\.co/.test(item.url) &&
     item.status === 200 &&
     Number(item.contentLength || 0) >= 500000 &&
     Number(item.contentLength || 0) <= 550000
