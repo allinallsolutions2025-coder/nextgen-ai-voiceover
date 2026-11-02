@@ -42,11 +42,11 @@ async function waitForGeneration(page) {
     return status.startsWith("Generating paragraph") ||
       status.startsWith("Generating one continuous voiceover") ||
       status.startsWith("Generation failed:");
-  }, { timeout: 30000 });
+  }, null, { timeout: 30000 });
   await page.waitForFunction(() => {
     const status = document.querySelector("#statusMessage")?.textContent || "";
     return status.startsWith("Voiceover complete.") || status.startsWith("Generation failed:");
-  }, { timeout: 8 * 60 * 1000 });
+  }, null, { timeout: 8 * 60 * 1000 });
   const status = (await page.locator("#statusMessage").innerText()).trim();
   assert(status.startsWith("Voiceover complete."), "Speech generation failed: " + status);
 }
@@ -74,6 +74,9 @@ try {
   const page = await context.newPage();
 
   page.on("pageerror", error => report.errors.push("pageerror: " + error.message));
+  page.on("console", message => {
+    if (message.type() === "error") report.errors.push("console: " + message.text());
+  });
   page.on("requestfailed", request => {
     report.errors.push("requestfailed: " + safeUrl(request.url()) + " — " + (request.failure()?.errorText || "unknown"));
   });
@@ -114,7 +117,7 @@ try {
   await page.waitForFunction(() => {
     const badge = document.querySelector("#modelBadge")?.textContent || "";
     return badge.includes("Model ready") || badge.includes("Model load failed");
-  }, { timeout: 8 * 60 * 1000 });
+  }, null, { timeout: 8 * 60 * 1000 });
   const modelBadge = (await page.locator("#modelBadge").innerText()).trim();
   report.timings.modelLoadSecondsWallClock = Number(((Date.now() - modelLoadStarted) / 1000).toFixed(2));
   report.checks.modelLoaded = modelBadge.includes("Model ready");
@@ -135,10 +138,11 @@ try {
 
   // Two paragraphs verify the individual WAVs and one continuous full-script WAV.
   await page.locator("#voiceSelect").selectOption("am_adam");
-  await page.locator("#scriptInput").fill(
-    "This is the first paragraph in the NextGen AI Voiceover browser test. It should become its own WAV file.\n\n" +
-    "This is the second paragraph. The full script should also be generated as one continuous voiceover."
-  );
+  const longParagraph = ("A continuous narration keeps the complete script in the audio export and preserves every spoken word across the streamed chunks ").repeat(14).trim() + ".";
+  const secondParagraph = "This is the second paragraph. The full script should also be generated as one continuous voiceover.";
+  await page.locator("#scriptInput").fill(longParagraph + "\n\n" + secondParagraph);
+  report.scriptParagraphCharacterCounts = [longParagraph.length, secondParagraph.length];
+  assert(longParagraph.length > 1000, "The first paragraph should exercise multi-chunk streaming.");
   assert.equal(await page.locator("#paragraphCount").innerText(), "2 paragraphs");
   await page.locator("#generateButton").click();
   await waitForGeneration(page);
@@ -153,6 +157,7 @@ try {
   report.paragraphWavs = paragraphWavs;
   report.fullScriptWav = fullWav;
   assert(fullWav.sizeBytes > 44 && fullWav.validWav, "Full-script output is not a valid WAV.");
+  assert(fullWav.sizeBytes > paragraphWavs[0].sizeBytes, "Full-script audio should contain the extended paragraph and second paragraph.");
   assert.equal(fullWav.status, 200, "Full-script audio blob could not be read.");
   assert(paragraphWavs.every(item => item.validWav && item.sizeBytes > 44), "One or more paragraph outputs are invalid.");
   report.checks.paragraphWavOutputs = true;
