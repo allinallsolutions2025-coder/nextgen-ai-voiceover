@@ -1,4 +1,5 @@
 import { validateInput } from "./lib/text.js";
+import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
@@ -121,49 +122,39 @@ async function getJSZip() {
   return state.jsZipPromise;
 }
 
-function normalizeVoices(rawVoices) {
-  const source = rawVoices && typeof rawVoices === "object" && !Array.isArray(rawVoices) && rawVoices.voices
-    ? rawVoices.voices
-    : rawVoices;
-
-  let entries = [];
-  if (Array.isArray(source)) {
-    entries = source.map((item) => {
-      if (typeof item === "string") return item;
-      return item?.id ?? item?.name ?? item?.voice ?? "";
-    });
-  } else if (source && typeof source === "object") {
-    entries = Object.keys(source);
-  }
-
-  return [...new Set(entries.map((item) => String(item).trim()).filter(Boolean))].sort();
-}
-
-async function populateVoiceSelector(tts) {
-  let voices = [];
-  if (typeof tts.list_voices === "function") {
-    voices = normalizeVoices(await tts.list_voices());
-  }
-
+function populateVoiceSelector(tts) {
+  // In Kokoro.js 1.2.1, list_voices() prints a table but returns nothing.
+  // The supported catalogue is exposed by the read-only tts.voices getter.
+  const voices = normalizeVoiceCatalog(tts.voices);
   if (!voices.length) {
-    elements.voiceHelp.textContent = "Voice listing was unavailable; using the known Adam voice for this test.";
-    voices = ["am_adam"];
-  } else {
-    elements.voiceHelp.textContent = voices.length + " voices reported by the loaded runtime.";
+    throw new Error("Kokoro loaded, but its supported voice catalogue was empty.");
   }
 
-  const preferred = voices.includes("am_adam") ? "am_adam" : voices[0];
-  elements.voiceSelect.replaceChildren();
-
+  const groups = new Map();
   for (const voice of voices) {
-    const option = document.createElement("option");
-    option.value = voice;
-    option.textContent = voice;
-    elements.voiceSelect.append(option);
+    if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
+    groups.get(voice.languageLabel).push(voice);
   }
 
+  elements.voiceSelect.replaceChildren();
+  for (const [languageLabel, groupVoices] of groups) {
+    const group = document.createElement("optgroup");
+    group.label = languageLabel;
+    for (const voice of groupVoices) {
+      const option = document.createElement("option");
+      option.value = voice.id;
+      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ")";
+      group.append(option);
+    }
+    elements.voiceSelect.append(group);
+  }
+
+  const preferred = voices.some((voice) => voice.id === "am_adam") ? "am_adam" : voices[0].id;
   elements.voiceSelect.value = preferred;
   elements.voiceSelect.disabled = false;
+  elements.voiceHelp.textContent =
+    voices.length + " voices available: " + [...groups.keys()].join(" and ") +
+    ". Each voice file loads when first used and can be cached by your browser.";
 }
 
 async function loadModel() {
@@ -172,7 +163,7 @@ async function loadModel() {
 
   try {
     const tts = await getTTS();
-    await populateVoiceSelector(tts);
+    populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
     setStatus("Kokoro is loaded in this browser. Choose a voice and generate a short test script.", "good");
     elements.generateButton.disabled = false;

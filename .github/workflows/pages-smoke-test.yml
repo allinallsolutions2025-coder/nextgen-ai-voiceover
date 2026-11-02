@@ -2,11 +2,10 @@ name: Test live GitHub Pages app
 
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["Deploy preview to GitHub Pages"]
+    types: [completed]
     branches: [main]
-    paths:
-      - ".github/workflows/pages-smoke-test.yml"
-      - "scripts/pages-smoke-test.js"
 
 permissions:
   contents: read
@@ -17,9 +16,10 @@ concurrency:
 
 jobs:
   browser-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     name: Chromium live-site test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
