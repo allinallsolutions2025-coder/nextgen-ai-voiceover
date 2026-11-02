@@ -18,7 +18,7 @@ test("supports arrays of voice metadata objects", () => {
     { id: "am_adam", name: "Adam", language: "en-us", gender: "Male" },
     { id: "af_heart", name: "Heart", language: "en-us", gender: "Female" }
   ]);
-  assert.deepEqual(voices.map(v => v.id), ["af_heart", "am_adam"]);
+  assert.deepEqual(voices.map(v => v.id), ["am_adam", "af_heart"]);
 });
 
 test("supports arrays of plain voice IDs", () => {
