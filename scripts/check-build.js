@@ -74,7 +74,7 @@ if (!main.includes('id = "fullScriptAudio"') || !main.includes('download.id = "f
 if (html.includes("Performance diagnostics") || html.includes("modelLoadMetric") || html.includes("synthesisMetric")) {
   throw new Error("Performance diagnostics must not be part of the public app UI.");
 }
-if (!main.includes("validateParagraphInput") || !main.includes("generateSelectedSpeechBlob(tts, scriptForSpeech")) {
+if (!main.includes("validateParagraphInput") || !main.includes("tts, scriptForSpeech, voice, speed, outputFormat, controller.signal") {
   throw new Error("Paragraph generation and full-script streaming are required.");
 }
 if (!main.includes("tts.stream(") || !main.includes("createWavBlobFromSamples")) {
