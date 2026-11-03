@@ -1,3 +1,4 @@
+// Keep MP3 encoder preparation visible to the live browser smoke test.
 // Browser-local English synthesis plus an optional connected multilingual Kokoro API.
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";

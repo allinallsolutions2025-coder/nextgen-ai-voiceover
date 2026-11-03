@@ -39,10 +39,11 @@ async function saveReport() {
 async function waitForGeneration(page) {
   await page.waitForFunction(() => {
     const status = document.querySelector("#statusMessage")?.textContent || "";
-    return status.startsWith("Generating paragraph") ||
+    return status.startsWith("Preparing the MP3 encoder") ||
+      status.startsWith("Generating paragraph") ||
       status.startsWith("Generating one continuous voiceover") ||
       status.startsWith("Generation failed:");
-  }, null, { timeout: 30000 });
+  }, null, { timeout: 120000 });
   await page.waitForFunction(() => {
     const status = document.querySelector("#statusMessage")?.textContent || "";
     return status.startsWith("Voiceover complete.") || status.startsWith("Generation failed:");
