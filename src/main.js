@@ -7,7 +7,7 @@ const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
-const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/audio_bundle.mjs";
+const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/audio_bundle.js";
 const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/wasm";
 const KOKORO_MULTILINGUAL_CPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
 const MAX_CHARACTERS = 20000;
@@ -292,6 +292,36 @@ function populateVoiceSelector(tts = null) {
   updatePreviewButtonState();
 }
 
+let mediaPipeAudioBundlePromise = null;
+
+async function getMediaPipeAudioApi() {
+  if (globalThis.Audio?.FilesetResolver && globalThis.Audio?.TextToSpeech) {
+    return globalThis.Audio;
+  }
+  if (!mediaPipeAudioBundlePromise) {
+    mediaPipeAudioBundlePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = MEDIAPIPE_CDN;
+      script.crossOrigin = "anonymous";
+      script.async = true;
+      script.onload = () => {
+        const api = globalThis.Audio;
+        if (api?.FilesetResolver && api?.TextToSpeech) {
+          resolve(api);
+        } else {
+          reject(new Error("The MediaPipe Audio bundle loaded but did not expose FilesetResolver and TextToSpeech."));
+        }
+      };
+      script.onerror = () => reject(new Error("Could not load the stable MediaPipe Audio bundle."));
+      document.head.appendChild(script);
+    }).catch((error) => {
+      mediaPipeAudioBundlePromise = null;
+      throw error;
+    });
+  }
+  return mediaPipeAudioBundlePromise;
+}
+
 async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
   const requestedSpeed = Math.min(2, Math.max(0.5, Number(speed) || 1));
   if (state.multilingualTts && state.multilingualSpeed === requestedSpeed) {
@@ -317,13 +347,7 @@ async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
   setStatus("Loading the on-device multilingual Kokoro model. No speech server is involved…");
 
   state.multilingualTtsPromise = (async () => {
-    const module = await import(MEDIAPIPE_CDN);
-    const api = module.FilesetResolver && module.TextToSpeech
-      ? module
-      : (module.default || module);
-    if (!api.FilesetResolver || !api.TextToSpeech) {
-      throw new Error("MediaPipe Tasks Audio did not expose FilesetResolver and TextToSpeech.");
-    }
+    const api = await getMediaPipeAudioApi();
     // Use the published stable MediaPipe Audio Tasks runtime.
     const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM);
     const tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
