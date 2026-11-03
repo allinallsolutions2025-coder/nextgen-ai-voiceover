@@ -55,7 +55,7 @@ if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The sp
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
 if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") || !main.includes("nextgen-voiceover-draft-v1")) throw new Error("Local script draft save and recovery are required.");
 if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
-if (!main.includes("@mediapipe/tasks-audio@1.2.0") ||
+if (!main.includes("@mediapipe/tasks-audio@1.2.1-rc.20261102") ||
     !main.includes("kokoro_int8_gpu_fp16.litertlm") ||
     !main.includes("kokoro_int8_fp16.litertlm") ||
     !main.includes("TextToSpeech.createFromOptions") ||
