@@ -27,7 +27,12 @@ const elements = {
   resultsPanel: document.querySelector("#resultsPanel"),
   resultsSummary: document.querySelector("#resultsSummary"),
   audioResults: document.querySelector("#audioResults"),
-  zipDownload: document.querySelector("#zipDownload")
+  zipDownload: document.querySelector("#zipDownload"),
+  serverApiUrl: document.querySelector("#serverApiUrl"),
+  serverApiKey: document.querySelector("#serverApiKey"),
+  connectServerButton: document.querySelector("#connectServerButton"),
+  serverConnectionStatus: document.querySelector("#serverConnectionStatus"),
+  engineLabel: document.querySelector("#engineLabel")
 };
 
 const state = {
@@ -37,6 +42,9 @@ const state = {
   jsZipPromise: null,
   lamePromise: null,
   supportedVoiceIds: new Set(),
+  serverVoiceIds: new Set(),
+  serverApiBase: "",
+  serverReady: false,
   objectUrls: []
 };
 
@@ -142,17 +150,17 @@ async function getJSZip() {
   return state.jsZipPromise;
 }
 
-function populateVoiceSelector(tts) {
-  // The current Kokoro.js browser package supports the 28 English voice IDs returned
-  // by tts.voices. The broader 54-voice Kokoro catalogue includes 26 other-language
-  // presets, but these need a language-aware server pipeline and must not be selectable here.
-  const voices = normalizeVoiceCatalog(tts.voices);
-  const completeCatalog = getCompleteVoiceCatalog(tts.voices);
-  if (!voices.length) throw new Error("Kokoro loaded, but its supported voice catalogue was empty.");
-  const supportedIds = new Set(voices.map((voice) => voice.id));
-  state.supportedVoiceIds = supportedIds;
-  const unavailableVoices = completeCatalog.filter((voice) => !supportedIds.has(voice.id));
-
+function populateVoiceSelector(tts = null) {
+  const previousSelection = elements.voiceSelect.value;
+  const voices = normalizeVoiceCatalog(tts?.voices ?? []);
+  const completeCatalog = getCompleteVoiceCatalog(tts?.voices ?? []);
+  state.supportedVoiceIds = new Set(voices.map((voice) => voice.id));
+  const serverVoices = completeCatalog.filter((voice) =>
+    !state.supportedVoiceIds.has(voice.id) && state.serverVoiceIds.has(voice.id)
+  );
+  const unavailableVoices = completeCatalog.filter((voice) =>
+    !state.supportedVoiceIds.has(voice.id) && !state.serverVoiceIds.has(voice.id)
+  );
   const groups = new Map();
   for (const voice of voices) {
     if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
@@ -162,7 +170,7 @@ function populateVoiceSelector(tts) {
   elements.voiceSelect.replaceChildren();
   for (const [languageLabel, groupVoices] of groups) {
     const group = document.createElement("optgroup");
-    group.label = languageLabel;
+    group.label = languageLabel + " — browser";
     for (const voice of groupVoices) {
       const option = document.createElement("option");
       option.value = voice.id;
@@ -171,28 +179,118 @@ function populateVoiceSelector(tts) {
     }
     elements.voiceSelect.append(group);
   }
-
+  if (serverVoices.length) {
+    const group = document.createElement("optgroup");
+    group.label = "Multilingual voices — connected server (" + serverVoices.length + ")";
+    for (const voice of serverVoices) {
+      const option = document.createElement("option");
+      option.value = voice.id;
+      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") · server";
+      group.append(option);
+    }
+    elements.voiceSelect.append(group);
+  }
   if (unavailableVoices.length) {
-    const unavailableGroup = document.createElement("optgroup");
-    unavailableGroup.label = "Multilingual voices — server required (" + unavailableVoices.length + ")";
+    const group = document.createElement("optgroup");
+    group.label = "Multilingual voices — server required (" + unavailableVoices.length + ")";
     for (const voice of unavailableVoices) {
       const option = document.createElement("option");
       option.value = voice.id;
       option.disabled = true;
-      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") — server required";
-      unavailableGroup.append(option);
+      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") — connect server";
+      group.append(option);
     }
-    elements.voiceSelect.append(unavailableGroup);
+    elements.voiceSelect.append(group);
   }
 
-  const preferred = voices.some((voice) => voice.id === "af_heart") ? "af_heart" : voices[0].id;
-  elements.voiceSelect.value = preferred;
-  elements.voiceSelect.disabled = false;
+  const preserved = [...elements.voiceSelect.options].find((option) =>
+    option.value === previousSelection && !option.disabled
+  );
+  const preferred = voices.some((voice) => voice.id === "af_heart") ? "af_heart" :
+    (voices[0]?.id || serverVoices[0]?.id || "");
+  elements.voiceSelect.value = preserved?.value || preferred;
+  elements.voiceSelect.disabled = voices.length + serverVoices.length === 0;
   elements.voiceHelp.textContent =
-    voices.length + " browser-ready voices · " + unavailableVoices.length +
-    " multilingual voices need a server engine · " + [...groups.keys()].join(" · ");
+    voices.length + " browser-ready voices · " +
+    (state.serverReady ? serverVoices.length + " multilingual server voices connected" :
+      unavailableVoices.length + " multilingual voices need a server") +
+    (groups.size ? " · " + [...groups.keys()].join(" · ") : "");
 }
 
+function normalizeServerBaseUrl(value) {
+  const parsed = new URL(String(value || "").trim());
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Use an HTTP or HTTPS server URL.");
+  return parsed.origin.replace(/\/+$/, "");
+}
+
+function serverHeaders() {
+  const key = elements.serverApiKey.value.trim();
+  return key ? { "X-API-Key": key } : {};
+}
+
+async function connectServer({ silent = false } = {}) {
+  const rawUrl = elements.serverApiUrl.value.trim();
+  if (!rawUrl) {
+    state.serverReady = false;
+    state.serverVoiceIds = new Set();
+    state.serverApiBase = "";
+    elements.serverConnectionStatus.textContent = "Not connected. Add your deployed Space URL to enable multilingual voices.";
+    elements.engineLabel.textContent = "Local generation";
+    try {
+      localStorage.removeItem("nextgen-kokoro-server-url");
+    } catch {}
+    if (state.tts || elements.voiceSelect.options.length) populateVoiceSelector(state.tts);
+    elements.generateButton.disabled = !state.tts;
+    return false;
+  }
+
+  elements.connectServerButton.disabled = true;
+  elements.connectServerButton.textContent = "Connecting…";
+  elements.serverConnectionStatus.textContent = "Checking multilingual engine…";
+  try {
+    const baseUrl = normalizeServerBaseUrl(rawUrl);
+    const headers = serverHeaders();
+    const healthResponse = await fetch(baseUrl + "/health", { headers });
+    if (!healthResponse.ok) throw new Error("Health check returned HTTP " + healthResponse.status + ".");
+    const health = await healthResponse.json();
+    if (health.status !== "ready") throw new Error("The server has not finished loading its Kokoro model.");
+    const voicesResponse = await fetch(baseUrl + "/v1/voices", { headers });
+    if (!voicesResponse.ok) throw new Error("Voice catalogue returned HTTP " + voicesResponse.status + ".");
+    const payload = await voicesResponse.json();
+    const knownIds = new Set(getCompleteVoiceCatalog().map((voice) => voice.id));
+    const ids = (Array.isArray(payload.voices) ? payload.voices : [])
+      .map((voice) => String(voice?.id || ""))
+      .filter((id) => knownIds.has(id));
+    state.serverVoiceIds = new Set(ids);
+    const multilingualCount = ids.filter((id) => !state.supportedVoiceIds.has(id)).length;
+    if (!multilingualCount) throw new Error("The server did not report any additional multilingual voices.");
+    state.serverApiBase = baseUrl;
+    state.serverReady = true;
+    try {
+      localStorage.setItem("nextgen-kokoro-server-url", baseUrl);
+    } catch {}
+    elements.serverConnectionStatus.textContent =
+      "Connected · " + multilingualCount + " multilingual voices ready · " + (health.device || "server");
+    elements.engineLabel.textContent = "Local + multilingual engine";
+    populateVoiceSelector(state.tts);
+    elements.generateButton.disabled = false;
+    if (!silent) setStatus("Multilingual engine connected. Server-enabled voices can now be selected.", "good");
+    return true;
+  } catch (error) {
+    state.serverReady = false;
+    state.serverVoiceIds = new Set();
+    state.serverApiBase = "";
+    elements.serverConnectionStatus.textContent = "Connection failed: " + (error?.message || String(error));
+    elements.engineLabel.textContent = "Local generation";
+    if (state.tts || elements.voiceSelect.options.length) populateVoiceSelector(state.tts);
+    elements.generateButton.disabled = !state.tts;
+    if (!silent) setStatus("Could not connect to the multilingual engine: " + (error?.message || String(error)), "error");
+    return false;
+  } finally {
+    elements.connectServerButton.disabled = false;
+    elements.connectServerButton.textContent = "Connect / refresh";
+  }
+}
 async function loadModel() {
   if (state.tts) {
     setBadge("Model ready", "ready");
@@ -208,13 +306,24 @@ async function loadModel() {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus("Voice model ready. Enabled English voices can be generated in this browser; the multilingual presets are shown as unavailable until a multilingual server engine is connected.", "good");
+    setStatus(
+      state.serverReady
+        ? "Browser model ready. English voices run locally; multilingual voices run on your connected server."
+        : "Browser model ready. English voices run locally; connect a multilingual server to enable other languages.",
+      "good"
+    );
     elements.generateButton.disabled = false;
     setProgress(100);
   } catch (error) {
     console.error(error);
     setBadge("Model load failed", "error");
-    setStatus("Could not load the voice model: " + (error?.message || String(error)) + ". Check your connection and try again.", "error");
+    if (state.serverReady) {
+      populateVoiceSelector(null);
+      elements.generateButton.disabled = false;
+      setStatus("The browser model could not load, but your connected multilingual server is available.", "good");
+    } else {
+      setStatus("Could not load the voice model: " + (error?.message || String(error)) + ". Check your connection and try again.", "error");
+    }
     setProgress(0);
   } finally {
     const ready = Boolean(state.tts);
@@ -298,6 +407,42 @@ async function generateSpeechBlob(tts, text, options, outputFormat) {
   }
   if (outputFormat === "mp3") return createMp3BlobFromSamples(combined, sampleRate);
   return createWavBlobFromSamples(combined, sampleRate);
+}
+
+async function generateRemoteSpeechBlob(text, voice, speed, outputFormat) {
+  if (!state.serverReady || !state.serverApiBase) {
+    throw new Error("The multilingual server is not connected. Connect or refresh it, then try again.");
+  }
+  const response = await fetch(state.serverApiBase + "/v1/audio/speech", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...serverHeaders() },
+    body: JSON.stringify({ input: text, voice, speed })
+  });
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 300);
+    throw new Error("Multilingual server returned HTTP " + response.status + (detail ? ": " + detail : ""));
+  }
+  const wavBlob = await response.blob();
+  if (wavBlob.size <= 44 || !wavBlob.type.includes("audio")) {
+    throw new Error("The multilingual server returned an empty or unsupported audio file.");
+  }
+  if (outputFormat === "wav") return wavBlob;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) throw new Error("This browser cannot convert server WAV audio to MP3.");
+  const context = new AudioContextClass();
+  try {
+    const decoded = await context.decodeAudioData(await wavBlob.arrayBuffer());
+    return await createMp3BlobFromSamples(new Float32Array(decoded.getChannelData(0)), decoded.sampleRate);
+  } finally {
+    await context.close();
+  }
+}
+
+async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat) {
+  if (state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice)) {
+    return generateRemoteSpeechBlob(text, voice, speed, outputFormat);
+  }
+  return generateSpeechBlob(tts, text, { voice, speed }, outputFormat);
 }
 
 async function createMp3BlobFromSamples(samples, sampleRate) {
@@ -398,12 +543,16 @@ async function generateAudio() {
   const scriptForSpeech = validation.paragraphs.join("\n\n");
 
   try {
-    const tts = await getTTS();
-    if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
-    setBadge("Model ready", "ready");
     const voice = elements.voiceSelect.value || "af_heart";
-    if (!state.supportedVoiceIds.has(voice)) {
-      throw new Error("Voice " + voice + " is not supported by this browser engine. Select one of the enabled English voices; multilingual voices require a multilingual server engine.");
+    const useServer = state.serverReady && state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
+    let tts = state.tts;
+    if (!useServer) {
+      tts = tts || await getTTS();
+      if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
+      setBadge("Model ready", "ready");
+      if (!state.supportedVoiceIds.has(voice)) {
+        throw new Error("Voice " + voice + " is not supported by the browser runtime or connected multilingual server.");
+      }
     }
     const speed = Number(elements.speedInput.value);
     if (outputFormat === "mp3") {
@@ -416,10 +565,11 @@ async function generateAudio() {
     for (let index = 0; index < validation.paragraphs.length; index += 1) {
       const paragraphNumber = index + 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
-      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + "…");
+      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length +
+        (useServer ? " on the multilingual server…" : "…"));
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const audioBlob = await generateSpeechBlob(tts, validation.paragraphs[index], { voice, speed }, outputFormat);
+      const audioBlob = await generateSelectedSpeechBlob(tts, validation.paragraphs[index], voice, speed, outputFormat);
       outputBlobs.push(audioBlob);
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + extension;
       addAudioResult({
@@ -442,7 +592,7 @@ async function generateAudio() {
     } else {
       setStatus("Generating one continuous voiceover for the complete script…");
       await new Promise((resolve) => setTimeout(resolve, 0));
-      fullScriptBlob = await generateSpeechBlob(tts, scriptForSpeech, { voice, speed }, outputFormat);
+      fullScriptBlob = await generateSelectedSpeechBlob(tts, scriptForSpeech, voice, speed, outputFormat);
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
@@ -484,10 +634,10 @@ async function generateAudio() {
     setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed paragraph WAV files remain available below.", "error");
     elements.resultsPanel.hidden = elements.audioResults.childElementCount === 0;
   } finally {
-    elements.generateButton.disabled = !state.tts;
+    elements.generateButton.disabled = !state.tts && !state.serverReady;
     elements.loadButton.disabled = Boolean(state.tts);
     elements.scriptInput.disabled = false;
-    elements.voiceSelect.disabled = !state.tts;
+    elements.voiceSelect.disabled = !state.tts && !state.serverReady;
     elements.speedInput.disabled = false;
     elements.outputFormat.disabled = false;
   }
@@ -506,6 +656,7 @@ elements.speedInput.addEventListener("input", () => {
 
 elements.loadButton.addEventListener("click", loadModel);
 elements.generateButton.addEventListener("click", generateAudio);
+elements.connectServerButton.addEventListener("click", () => void connectServer());
 
 elements.clearButton.addEventListener("click", () => {
   elements.scriptInput.value = "";
@@ -528,6 +679,9 @@ if (!window.isSecureContext && location.hostname !== "localhost" && location.hos
     } catch (error) {
       console.info("Persistent browser storage was not granted.", error);
     }
+    elements.serverApiUrl.value = localStorage.getItem("nextgen-kokoro-server-url") || "";
+    elements.serverApiKey.value = "";
+    if (elements.serverApiUrl.value) await connectServer({ silent: true });
     await loadModel();
   }
   if (document.readyState === "complete") {

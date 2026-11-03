@@ -1,0 +1,56 @@
+name: Deploy multilingual Kokoro backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      space_repo:
+        description: Hugging Face Space repository (username/space-name)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Publish backend to Hugging Face Space
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify deployment credentials
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SPACE_REPO: ${{ inputs.space_repo }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::Add a GitHub Actions secret named HF_TOKEN with write access to the target Hugging Face Space."
+            exit 1
+          fi
+          if ! printf '%s' "$SPACE_REPO" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+            echo "::error::space_repo must be username/space-name."
+            exit 1
+          fi
+
+      - name: Push backend files to Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SPACE_REPO: ${{ inputs.space_repo }}
+        run: |
+          set -euo pipefail
+          git lfs install
+          git clone "https://user:${HF_TOKEN}@huggingface.co/spaces/${SPACE_REPO}" hf-space
+          find hf-space -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a backend/. hf-space/
+          cd hf-space
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "Hugging Face Space already contains the current backend."
+          else
+            git commit -m "Deploy NextGen multilingual Kokoro API"
+            git push origin HEAD:main
+          fi

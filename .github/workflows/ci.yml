@@ -41,6 +41,16 @@ jobs:
       - name: Build static site
         run: npm run build
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Validate multilingual backend source
+        run: |
+          python -m py_compile backend/app.py backend/voice_catalog.py
+          python -m unittest discover -s backend -p "test_*.py"
+
       - name: Verify deployment output
         run: |
           test -s dist/index.html
@@ -48,5 +58,6 @@ jobs:
           test -s dist/src/lib/voice-catalog.js
           test -s dist/src/styles.css
           test -f dist/.nojekyll
+          test ! -e dist/backend
           test ! -e dist/docs
           test ! -e dist/.github

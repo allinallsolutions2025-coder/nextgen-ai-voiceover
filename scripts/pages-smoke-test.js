@@ -243,6 +243,87 @@ try {
   assert.equal(await page.locator("#fullScriptAudio .format-tag").innerText(), "MP3");
   report.checks.mp3Output = true;
 
+  // Test the multilingual client path with a deterministic in-browser API mock.
+  const mockEngineUrl = "https://mock-multilingual-engine.local";
+  const sampleCount = 12000;
+  const mockWav = Buffer.alloc(44 + sampleCount * 2);
+  mockWav.write("RIFF", 0);
+  mockWav.writeUInt32LE(36 + sampleCount * 2, 4);
+  mockWav.write("WAVE", 8);
+  mockWav.write("fmt ", 12);
+  mockWav.writeUInt32LE(16, 16);
+  mockWav.writeUInt16LE(1, 20);
+  mockWav.writeUInt16LE(1, 22);
+  mockWav.writeUInt32LE(24000, 24);
+  mockWav.writeUInt32LE(48000, 28);
+  mockWav.writeUInt16LE(2, 32);
+  mockWav.writeUInt16LE(16, 34);
+  mockWav.write("data", 36);
+  mockWav.writeUInt32LE(sampleCount * 2, 40);
+  for (let i = 0; i < sampleCount; i += 1) {
+    mockWav.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 440 * i / 24000) * 8000), 44 + i * 2);
+  }
+  const allowedOrigin = new URL(targetUrl).origin;
+  let remoteCalls = 0;
+  await page.route(mockEngineUrl + "/**", async route => {
+    const request = route.request();
+    const common = {
+      "access-control-allow-origin": allowedOrigin,
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-headers": "Content-Type, X-API-Key"
+    };
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: common });
+    } else if (pathname === "/health") {
+      await route.fulfill({ status: 200, headers: { ...common, "content-type": "application/json" },
+        body: JSON.stringify({ status: "ready", device: "mock", voice_count: 26 }) });
+    } else if (pathname === "/v1/voices") {
+      await route.fulfill({ status: 200, headers: { ...common, "content-type": "application/json" },
+        body: JSON.stringify({ voices: unavailableVoices.map(option => ({ id: option.id })) }) });
+    } else if (pathname === "/v1/audio/speech" && request.method() === "POST") {
+      const body = request.postDataJSON();
+      assert.equal(body.voice, "zf_xiaoyi");
+      assert(body.input && body.input.length > 0);
+      assert(body.speed >= 0.5 && body.speed <= 2);
+      remoteCalls += 1;
+      await route.fulfill({ status: 200, headers: { ...common, "content-type": "audio/wav" }, body: mockWav });
+    } else {
+      await route.fulfill({ status: 404, headers: common, body: "not found" });
+    }
+  });
+
+  await page.locator("#serverApiUrl").fill(mockEngineUrl);
+  await page.locator("#connectServerButton").click();
+  await page.waitForFunction(() => (document.querySelector("#serverConnectionStatus")?.textContent || "").startsWith("Connected"));
+  assert.equal(await page.locator("#voiceSelect option[value='zf_xiaoyi']").isDisabled(), false);
+  await page.locator("#voiceSelect").selectOption("zf_xiaoyi");
+  await page.locator("#outputFormat").selectOption("wav");
+  await page.locator("#scriptInput").fill("你好，这是多语言语音测试。");
+  await page.locator("#generateButton").click();
+  await waitForGeneration(page);
+  const remoteWav = await inspectAudio(page, "#fullScriptAudio audio");
+  assert(remoteWav.validWav && remoteWav.sizeBytes > 44);
+  assert.equal(remoteCalls, 1);
+  report.remoteWavOutput = remoteWav;
+  report.checks.multilingualVoiceEnabledByServerCatalogue = true;
+  report.checks.multilingualRemoteWavOutput = true;
+
+  await page.locator("#outputFormat").selectOption("mp3");
+  await page.locator("#scriptInput").fill("你好，这是 MP3 格式测试。");
+  await page.locator("#generateButton").click();
+  await waitForGeneration(page);
+  const remoteMp3 = await inspectAudio(page, "#fullScriptAudio audio");
+  assert(remoteMp3.validMp3 && remoteMp3.sizeBytes > 100);
+  assert.equal(remoteCalls, 2);
+  report.remoteMp3Output = remoteMp3;
+  report.checks.multilingualRemoteMp3Output = true;
+
+  await page.locator("#serverApiUrl").fill("");
+  await page.locator("#connectServerButton").click();
+  assert.equal(await page.locator("#voiceSelect option[value='zf_xiaoyi']").isDisabled(), true);
+  report.checks.multilingualServerDisconnectWorks = true;
+
   // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];
   for (const voice of representativeVoices) {
