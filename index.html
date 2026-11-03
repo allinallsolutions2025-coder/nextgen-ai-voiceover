@@ -111,8 +111,8 @@
 
             <div class="field speed-setting">
               <div class="range-heading"><label for="speedInput">Speed</label><output id="speedValue" for="speedInput">0.95×</output></div>
-              <input id="speedInput" type="range" min="0.80" max="1.20" step="0.05" value="0.95">
-              <div class="range-ends"><span>Slower</span><span>Faster</span></div>
+              <input id="speedInput" type="range" min="0.50" max="2.00" step="0.05" value="0.95">
+              <div class="range-ends"><span>0.50×</span><span>2.00×</span></div>
             </div>
 
             <div class="settings-divider"></div>
@@ -138,7 +138,7 @@
             </div>
           </section>
 
-          <div class="settings-footnote">Powered by Kokoro 82M · ONNX q8 · WebAssembly. First-time model and voice downloads may take a little longer.</div>
+          <div class="settings-footnote">Powered by Kokoro 82M · ONNX q8 · WebAssembly. The model is automatically restored on startup and cached in this browser after its first download.</div>
         </aside>
       </section>
     </main>

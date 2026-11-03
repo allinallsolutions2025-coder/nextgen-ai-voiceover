@@ -79,10 +79,16 @@ async function getTTS() {
   if (!state.ttsPromise) {
     state.ttsPromise = (async () => {
       setBadge("Loading model", "loading");
-      setStatus("Loading the Kokoro voice model into this browser. The first download may take several minutes.");
+      setStatus("Restoring the voice model from this browser’s saved cache. The first visit downloads it; later visits reuse the cached model files.");
       const module = await import(KOKORO_CDN);
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
       if (!module.TextSplitterStream) throw new Error("The selected Kokoro.js module does not expose TextSplitterStream.");
+      // Transformers.js caches model and WASM files through the browser Cache API by default.
+      // Keep both caches enabled explicitly when this Kokoro bundle exposes its env object.
+      if (module.env) {
+        module.env.useBrowserCache = true;
+        module.env.useWasmCache = true;
+      }
       state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
@@ -144,6 +150,8 @@ function populateVoiceSelector(tts) {
 async function loadModel() {
   if (state.tts) {
     setBadge("Model ready", "ready");
+    elements.loadButton.textContent = "Model ready";
+    elements.loadButton.disabled = true;
     setStatus("Voice model is ready. Choose a voice and generate your script.", "good");
     return;
   }
@@ -163,7 +171,9 @@ async function loadModel() {
     setStatus("Could not load the voice model: " + (error?.message || String(error)) + ". Check your connection and try again.", "error");
     setProgress(0);
   } finally {
-    elements.loadButton.disabled = false;
+    const ready = Boolean(state.tts);
+    elements.loadButton.textContent = ready ? "Model ready" : "Retry model load";
+    elements.loadButton.disabled = ready;
   }
 }
 
@@ -391,7 +401,7 @@ async function generateAudio() {
     elements.resultsPanel.hidden = elements.audioResults.childElementCount === 0;
   } finally {
     elements.generateButton.disabled = !state.tts;
-    elements.loadButton.disabled = false;
+    elements.loadButton.disabled = Boolean(state.tts);
     elements.scriptInput.disabled = false;
     elements.voiceSelect.disabled = !state.tts;
     elements.speedInput.disabled = false;
@@ -422,4 +432,20 @@ updateScriptCounts();
 
 if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
   setStatus("Open this app over HTTPS or localhost for browser model compatibility.", "error");
+} else {
+  // Ask the browser to protect this origin’s model cache from routine storage eviction.
+  // This is best-effort; a declined request does not prevent browser caching.
+  async function initializeStudio() {
+    try {
+      if (navigator.storage?.persist) await navigator.storage.persist();
+    } catch (error) {
+      console.info("Persistent browser storage was not granted.", error);
+    }
+    await loadModel();
+  }
+  if (document.readyState === "complete") {
+    void initializeStudio();
+  } else {
+    window.addEventListener("load", () => void initializeStudio(), { once: true });
+  }
 }
