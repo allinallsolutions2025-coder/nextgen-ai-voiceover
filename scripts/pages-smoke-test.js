@@ -63,7 +63,8 @@ async function inspectAudio(page, selector, index = null) {
       sizeBytes: blob.size,
       riff: ascii.slice(0, 4),
       wave: ascii.slice(8, 12),
-      validWav: ascii.slice(0, 4) === "RIFF" && ascii.slice(8, 12) === "WAVE"
+      validWav: ascii.slice(0, 4) === "RIFF" && ascii.slice(8, 12) === "WAVE",
+      validMp3: ascii.slice(0, 3) === "ID3" || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
     };
   });
 }
@@ -142,10 +143,12 @@ try {
   const voices = voiceOptions.map(option => option.id);
   report.voiceCount = voices.length;
   report.voiceSample = voiceOptions.slice(0, 12);
-  report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma", "bm_george"].every(id => voices.includes(id));
-  assert.equal(voices.length, 28, "Expected 28 active English voices, found " + voices.length + ".");
+  report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma", "bm_george", "hf_alpha", "hm_omega", "if_sara", "im_nicola", "jf_alpha", "jm_kumo", "pf_dora", "pm_alex", "zf_xiaobei", "zm_yunjian", "ef_dora", "em_alex", "ff_siwis"].every(id => voices.includes(id));
+  assert.equal(voices.length, 54, "Expected all 54 Kokoro voices, found " + voices.length + ".");
   assert.equal(report.requiredVoicesPresent, true, "One or more expected voice IDs are missing.");
   report.checks.multipleVoicesDiscovered = true;
+  report.checks.all54VoicesAvailable = report.requiredVoicesPresent;
+  assert.equal(await page.locator("#outputFormat option").count(), 2, "Expected WAV and MP3 output choices.");
 
   temporaryDirectory = await mkdtemp(join(tmpdir(), "nextgen-pages-test-"));
 
@@ -172,6 +175,7 @@ try {
   assert(fullWav.sizeBytes > paragraphWavs[0].sizeBytes, "Full-script audio should contain both paragraphs.");
   assert.equal(fullWav.status, 200, "Full-script audio blob could not be read.");
   assert(paragraphWavs.every(item => item.validWav && item.sizeBytes > 44), "One or more paragraph outputs are invalid.");
+  assert((await page.locator("#fullScriptDownload").getAttribute("download")).endsWith(".wav"), "WAV selection did not produce a WAV filename.");
   report.checks.paragraphWavOutputs = true;
   report.checks.fullScriptWavOutput = true;
 
@@ -219,7 +223,19 @@ try {
   report.paragraphDownload = { filename: paragraphDownload.suggestedFilename(), sizeBytes: paragraphStats.size };
   report.checks.paragraphWavDownloadWorks = true;
 
-  // Exercise one voice from each remaining English voice group without synthesizing all 28 in CI.
+  // Verify MP3 encoding, preview MIME type, and download extension.
+  await page.locator("#outputFormat").selectOption("mp3");
+  await page.locator("#scriptInput").fill("This is a short MP3 export test.");
+  await page.locator("#generateButton").click();
+  await waitForGeneration(page);
+  const mp3 = await inspectAudio(page, "#fullScriptAudio audio");
+  assert(mp3.validMp3 && mp3.sizeBytes > 100, "MP3 export did not produce a valid MP3 stream.");
+  report.mp3Output = mp3;
+  assert((await page.locator("#fullScriptDownload").getAttribute("download")).endsWith(".mp3"), "MP3 selection did not produce an MP3 filename.");
+  assert.equal(await page.locator("#fullScriptAudio .format-tag").innerText(), "MP3");
+  report.checks.mp3Output = true;
+
+  // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];
   for (const voice of representativeVoices) {
     await page.locator("#voiceSelect").selectOption(voice);

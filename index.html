@@ -116,9 +116,13 @@
             </div>
 
             <div class="settings-divider"></div>
-            <div class="output-setting">
-              <div><strong>Output format</strong><small>Audio file format</small></div>
-              <span class="format-tag">WAV</span>
+            <div class="field output-format-field">
+              <label for="outputFormat">Output format</label>
+              <select id="outputFormat">
+                <option value="wav" selected>WAV · Lossless / larger files</option>
+                <option value="mp3">MP3 · Compressed / smaller files</option>
+              </select>
+              <small>Applies to paragraph files, the full-script file, and the ZIP bundle.</small>
             </div>
             <div class="output-setting">
               <div><strong>Generation mode</strong><small>Paragraphs + full script</small></div>

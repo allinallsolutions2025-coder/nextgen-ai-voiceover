@@ -1,9 +1,10 @@
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
-import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
+import { getCompleteVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.all.js";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 
@@ -14,6 +15,7 @@ const elements = {
   paragraphCount: document.querySelector("#paragraphCount"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceHelp: document.querySelector("#voiceHelp"),
+  outputFormat: document.querySelector("#outputFormat"),
   speedInput: document.querySelector("#speedInput"),
   speedValue: document.querySelector("#speedValue"),
   loadButton: document.querySelector("#loadButton"),
@@ -33,6 +35,7 @@ const state = {
   ttsPromise: null,
   TextSplitterStream: null,
   jsZipPromise: null,
+  lamePromise: null,
   objectUrls: []
 };
 
@@ -106,6 +109,26 @@ async function getTTS() {
   return state.ttsPromise;
 }
 
+async function getLameJS() {
+  if (window.lamejs?.Mp3Encoder) return window.lamejs;
+  if (!state.lamePromise) {
+    state.lamePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = LAMEJS_CDN;
+      script.async = true;
+      script.onload = () => window.lamejs?.Mp3Encoder
+        ? resolve(window.lamejs)
+        : reject(new Error("The MP3 encoder loaded without exposing lamejs.Mp3Encoder."));
+      script.onerror = () => reject(new Error("Could not load the browser MP3 encoder. Check your connection and retry."));
+      document.head.append(script);
+    }).catch((error) => {
+      state.lamePromise = null;
+      throw error;
+    });
+  }
+  return state.lamePromise;
+}
+
 async function getJSZip() {
   if (!state.jsZipPromise) {
     state.jsZipPromise = import(JSZIP_CDN)
@@ -119,7 +142,7 @@ async function getJSZip() {
 }
 
 function populateVoiceSelector(tts) {
-  const voices = normalizeVoiceCatalog(tts.voices);
+  const voices = getCompleteVoiceCatalog(tts.voices);
   if (!voices.length) throw new Error("Kokoro loaded, but its supported voice catalogue was empty.");
 
   const groups = new Map();
@@ -144,7 +167,7 @@ function populateVoiceSelector(tts) {
   const preferred = voices.some((voice) => voice.id === "am_adam") ? "am_adam" : voices[0].id;
   elements.voiceSelect.value = preferred;
   elements.voiceSelect.disabled = false;
-  elements.voiceHelp.textContent = voices.length + " voices · " + [...groups.keys()].join(" and ");
+  elements.voiceHelp.textContent = voices.length + " voices · " + [...groups.keys()].join(" · ");
 }
 
 async function loadModel() {
@@ -206,7 +229,7 @@ function createWavBlobFromSamples(samples, sampleRate) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-async function generateSpeechWav(tts, text, options) {
+async function generateSpeechBlob(tts, text, options, outputFormat) {
   if (typeof tts.stream !== "function") {
     throw new Error("This Kokoro runtime does not support streaming audio generation.");
   }
@@ -250,10 +273,36 @@ async function generateSpeechWav(tts, text, options) {
     combined.set(waveChunks[index], offset);
     offset += waveChunks[index].length;
   }
+  if (outputFormat === "mp3") return createMp3BlobFromSamples(combined, sampleRate);
   return createWavBlobFromSamples(combined, sampleRate);
 }
 
-function addAudioResult({ title, subtitle, filename, blob, kind, index }) {
+async function createMp3BlobFromSamples(samples, sampleRate) {
+  const lame = await getLameJS();
+  const encoder = new lame.Mp3Encoder(1, sampleRate, 128);
+  const pcm = new Int16Array(samples.length);
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    pcm[index] = sample < 0 ? Math.round(sample * 32768) : Math.round(sample * 32767);
+  }
+
+  const output = [];
+  const frameSize = 1152;
+  for (let offset = 0; offset < pcm.length; offset += frameSize) {
+    const encoded = encoder.encodeBuffer(pcm.subarray(offset, Math.min(offset + frameSize, pcm.length)));
+    if (encoded?.length) output.push(new Uint8Array(encoded));
+  }
+  const finalChunk = encoder.flush();
+  if (finalChunk?.length) output.push(new Uint8Array(finalChunk));
+  if (!output.length) throw new Error("The MP3 encoder returned an empty audio file.");
+  return new Blob(output, { type: "audio/mpeg" });
+}
+
+function formatLabel(outputFormat) {
+  return outputFormat === "mp3" ? "MP3" : "WAV";
+}
+
+function addAudioResult({ title, subtitle, filename, blob, kind, index, outputFormat }) {
   const url = URL.createObjectURL(blob);
   state.objectUrls.push(url);
 
@@ -278,10 +327,10 @@ function addAudioResult({ title, subtitle, filename, blob, kind, index }) {
   subtitleElement.textContent = subtitle;
   titleGroup.append(titleElement, subtitleElement);
 
-  const format = document.createElement("span");
-  format.className = "format-tag";
-  format.textContent = "WAV";
-  cardHeading.append(titleGroup, format);
+  const formatTag = document.createElement("span");
+  formatTag.className = "format-tag";
+  formatTag.textContent = formatLabel(outputFormat);
+  cardHeading.append(titleGroup, formatTag);
 
   const player = document.createElement("audio");
   player.controls = true;
@@ -294,7 +343,7 @@ function addAudioResult({ title, subtitle, filename, blob, kind, index }) {
   download.className = "audio-download";
   download.href = url;
   download.download = filename;
-  download.textContent = "↓ Download WAV";
+  download.textContent = "↓ Download " + formatLabel(outputFormat);
   if (kind === "full") download.id = "fullScriptDownload";
   else download.dataset.paragraphDownloadIndex = String(index);
 
@@ -317,17 +366,24 @@ async function generateAudio() {
   elements.scriptInput.disabled = true;
   elements.voiceSelect.disabled = true;
   elements.speedInput.disabled = true;
+  elements.outputFormat.disabled = true;
   setProgress(1);
 
-  const paragraphBlobs = [];
+  const outputBlobs = [];
+  const outputFormat = elements.outputFormat.value;
+  const extension = outputFormat === "mp3" ? "mp3" : "wav";
   const scriptForSpeech = validation.paragraphs.join("\n\n");
 
   try {
     const tts = await getTTS();
     if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    const voice = elements.voiceSelect.value || "am_adam";
+    const voice = elements.voiceSelect.value || "af_heart";
     const speed = Number(elements.speedInput.value);
+    if (outputFormat === "mp3") {
+      setStatus("Preparing the MP3 encoder…");
+      await getLameJS();
+    }
     const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
     let completedJobs = 0;
 
@@ -337,29 +393,30 @@ async function generateAudio() {
       setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + "…");
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const wavBlob = await generateSpeechWav(tts, validation.paragraphs[index], { voice, speed });
-      paragraphBlobs.push(wavBlob);
-      const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + ".wav";
+      const audioBlob = await generateSpeechBlob(tts, validation.paragraphs[index], { voice, speed }, outputFormat);
+      outputBlobs.push(audioBlob);
+      const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + extension;
       addAudioResult({
         title: "Paragraph " + paragraphNumber,
         subtitle: validation.paragraphs[index].slice(0, 110) + (validation.paragraphs[index].length > 110 ? "…" : ""),
         filename,
-        blob: wavBlob,
+        blob: audioBlob,
         kind: "paragraph",
-        index: paragraphNumber
+        index: paragraphNumber,
+        outputFormat
       });
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
 
     let fullScriptBlob;
-    if (paragraphBlobs.length === 1) {
+    if (outputBlobs.length === 1) {
       // A one-paragraph script is already the complete voiceover; reuse its audio.
-      fullScriptBlob = paragraphBlobs[0];
+      fullScriptBlob = outputBlobs[0];
     } else {
       setStatus("Generating one continuous voiceover for the complete script…");
       await new Promise((resolve) => setTimeout(resolve, 0));
-      fullScriptBlob = await generateSpeechWav(tts, scriptForSpeech, { voice, speed });
+      fullScriptBlob = await generateSpeechBlob(tts, scriptForSpeech, { voice, speed }, outputFormat);
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
@@ -367,19 +424,20 @@ async function generateAudio() {
     addAudioResult({
       title: "Full script voiceover",
       subtitle: validation.paragraphs.length + " paragraph(s) · " + voice + " · " + speed.toFixed(2) + "×",
-      filename: "full_script.wav",
+      filename: "full_script." + extension,
       blob: fullScriptBlob,
-      kind: "full"
+      kind: "full",
+      outputFormat
     });
 
     setStatus("Packaging the full-script and paragraph WAV files…");
     setProgress(96);
     const JSZip = await getJSZip();
     const zip = new JSZip();
-    for (let index = 0; index < paragraphBlobs.length; index += 1) {
-      zip.file("paragraph_" + String(index + 1).padStart(3, "0") + ".wav", paragraphBlobs[index]);
+    for (let index = 0; index < outputBlobs.length; index += 1) {
+      zip.file("paragraph_" + String(index + 1).padStart(3, "0") + "." + extension, outputBlobs[index]);
     }
-    zip.file("full_script.wav", fullScriptBlob);
+    zip.file("full_script." + extension, fullScriptBlob);
     const zipBlob = await zip.generateAsync({
       type: "blob",
       compression: "DEFLATE",
@@ -391,9 +449,9 @@ async function generateAudio() {
     elements.zipDownload.hidden = false;
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
-      "Full script voiceover + " + validation.paragraphs.length + " paragraph WAV file(s) · " + voice + " · " + speed.toFixed(2) + "×";
+      "Full script voiceover + " + validation.paragraphs.length + " paragraph " + formatLabel(outputFormat) + " file(s) · " + voice + " · " + speed.toFixed(2) + "×";
     setProgress(100);
-    setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete WAV bundle.", "good");
+    setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete " + formatLabel(outputFormat) + " bundle.", "good");
   } catch (error) {
     console.error(error);
     setProgress(0);
@@ -405,6 +463,7 @@ async function generateAudio() {
     elements.scriptInput.disabled = false;
     elements.voiceSelect.disabled = !state.tts;
     elements.speedInput.disabled = false;
+    elements.outputFormat.disabled = false;
   }
 }
 
@@ -412,6 +471,8 @@ elements.scriptInput.addEventListener("input", () => {
   updateScriptCounts();
   clearResults();
 });
+
+elements.outputFormat.addEventListener("change", () => clearResults());
 
 elements.speedInput.addEventListener("input", () => {
   elements.speedValue.textContent = Number(elements.speedInput.value).toFixed(2) + "×";

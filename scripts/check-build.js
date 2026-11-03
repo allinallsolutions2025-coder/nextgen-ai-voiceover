@@ -6,6 +6,7 @@ const requiredFiles = [
   "src/styles.css",
   "src/lib/text.js",
   "src/lib/voice-catalog.js",
+  "tests/voice-catalog.test.js",
   "package.json"
 ];
 
@@ -38,7 +39,11 @@ if (!main.includes('device: "wasm"')) throw new Error("The baseline browser test
 if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The speed control must support 0.50×–2.00×.");
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
 if (!main.includes("await loadModel();") || !main.includes("navigator.storage.persist")) throw new Error("The model must restore automatically and request persistent browser storage.");
-if (!main.includes("normalizeVoiceCatalog(tts.voices)")) throw new Error("The app must read the Kokoro tts.voices catalogue.");
+if (!main.includes("getCompleteVoiceCatalog(tts.voices)")) throw new Error("The app must expose the complete Kokoro voice catalogue.");
+if (!main.includes("LAMEJS_CDN") || !main.includes("createMp3BlobFromSamples")) throw new Error("MP3 export support is missing.");
+if (!html.includes('id="outputFormat"') || !html.includes('value="mp3"')) throw new Error("A user-selectable output format is required.");
+const voiceCatalog = await readFile(new URL("../src/lib/voice-catalog.js", import.meta.url), "utf8");
+if (!voiceCatalog.includes("pf_dora") || !voiceCatalog.includes("zf_xiaobei") || !voiceCatalog.includes("ff_siwis")) throw new Error("Multilingual voice presets are missing.");
 if (main.includes("tts.list_voices()")) throw new Error("Do not use list_voices() as a catalogue return value.");
 if (!main.includes('id = "fullScriptAudio"') || !main.includes('download.id = "fullScriptDownload"')) {
   throw new Error("The app must provide a whole-script audio preview and WAV download.");
@@ -46,7 +51,7 @@ if (!main.includes('id = "fullScriptAudio"') || !main.includes('download.id = "f
 if (html.includes("Performance diagnostics") || html.includes("modelLoadMetric") || html.includes("synthesisMetric")) {
   throw new Error("Performance diagnostics must not be part of the public app UI.");
 }
-if (!main.includes("validateParagraphInput") || !main.includes("generateSpeechWav(tts, scriptForSpeech")) {
+if (!main.includes("validateParagraphInput") || !main.includes("generateSpeechBlob(tts, scriptForSpeech")) {
   throw new Error("Paragraph generation and full-script streaming are required.");
 }
 if (!main.includes("tts.stream(") || !main.includes("createWavBlobFromSamples")) {
