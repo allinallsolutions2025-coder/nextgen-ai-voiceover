@@ -354,7 +354,6 @@ async function generateAudio() {
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
 
-    zip.file("full_script.wav", fullScriptBlob);
     addAudioResult({
       title: "Full script voiceover",
       subtitle: validation.paragraphs.length + " paragraph(s) · " + voice + " · " + speed.toFixed(2) + "×",
