@@ -5,7 +5,7 @@ Browser-first Kokoro text-to-speech studio with an optional multilingual Kokoro 
 ## Voice engines
 
 - **English browser engine:** Kokoro.js 1.2.1 with the ONNX q8 model and WASM. It generates 28 English voices locally.
-- **Full local multilingual engine:** MediaPipe Tasks Audio 1.2.1-rc.20261102 with the LiteRT Kokoro-82M CPU-compatible bundle and module-mode WASM runtime. It is designed to load all 54 voices and nine locales directly in the browser without a speech server or API key.
+- **Full local multilingual engine:** MediaPipe Tasks Audio 1.2.1-rc.20261102 with the LiteRT Kokoro-82M CPU-compatible bundle and the published MediaPipe ESM runtime. It is designed to load all 54 voices and nine locales directly in the browser without a speech server or API key.
 - **Optional remote engine:** a FastAPI backend using the Kokoro Python pipeline remains available for advanced deployments, but it is not required for any of the built-in Kokoro voices.
 - Voice choices are enabled only when a connected engine reports them. A voice is not made available just because its ID exists in a static catalogue.
 - The selected voice can be auditioned with a short sample before generating the full script.

@@ -59,7 +59,7 @@ if (!main.includes("@mediapipe/tasks-audio@1.2.1-rc.20261102") ||
     !main.includes("kokoro_int8_fp16.litertlm") ||
     !main.includes("TextToSpeech.createFromOptions") ||
     !main.includes("tts.listVoices()") ||
-    !main.includes("forAudioTasks(MEDIAPIPE_WASM, true)")) {
+    !main.includes("forAudioTasks(MEDIAPIPE_WASM)")) {
   throw new Error("The full local MediaPipe Kokoro model and 54-voice catalogue are required.");
 }
 if (!main.includes("generateMultilingualSpeechBlob") ||

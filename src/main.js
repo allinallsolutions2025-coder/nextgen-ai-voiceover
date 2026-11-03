@@ -7,7 +7,7 @@ const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
-const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.1-rc.20261102/+esm";
+const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.1-rc.20261102/audio_bundle.mjs";
 const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.1-rc.20261102/wasm";
 const KOKORO_MULTILINGUAL_CPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
 const MAX_CHARACTERS = 20000;
@@ -326,7 +326,7 @@ async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
     }
     // The module-mode WASM build is shipped alongside the default WASM build.
     // LiteRT-LM model tasks use the module-mode runtime.
-    const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM, true);
+    const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM);
     // Use the CPU-compatible Kokoro bundle for broad browser compatibility.
     // The GPU-specific bundle is not needed for this browser WASM path.
     const delegate = "CPU";
