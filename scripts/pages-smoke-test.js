@@ -194,14 +194,22 @@ try {
   assert(voicePreview.validWav && voicePreview.sizeBytes > 44, "Voice preview did not generate a valid WAV.");
   report.voicePreview = voicePreview;
   report.checks.selectedVoicePreview = true;
-  // Model initialization sets the ready badge just before the generate button is enabled.
-  // Wait for the real control state before clicking so Playwright cannot silently click a disabled button.
+  // Wait for previewSelectedVoice() to finish its finally block, not merely for
+  // the audio element to receive a blob URL. Generate is intentionally available
+  // during preview, so its enabled state alone is not a sufficient synchronization point.
   await page.waitForFunction(() => {
-    const button = document.querySelector("#generateButton");
-    return button && !button.disabled;
+    const previewButton = document.querySelector("#previewVoiceButton");
+    const status = document.querySelector("#statusMessage")?.textContent || "";
+    return previewButton &&
+      !previewButton.disabled &&
+      previewButton.textContent.trim() === "Preview voice" &&
+      status.startsWith("Voice preview ready:");
   }, null, { timeout: 30000 });
+  report.checks.previewFinishedBeforeGenerate = true;
+  const generateButton = page.locator("#generateButton");
+  assert.equal(await generateButton.isDisabled(), false, "Generate must be enabled after voice preview finishes.");
   report.checks.generateEnabledAfterPreview = true;
-  await page.locator("#generateButton").click();
+  await generateButton.click();
   await waitForGeneration(page);
 
   const fullWav = await inspectAudio(page, "#fullScriptAudio audio");
