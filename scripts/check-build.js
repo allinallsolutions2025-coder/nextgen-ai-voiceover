@@ -57,6 +57,8 @@ if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") 
 if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
 if (!main.includes("@mediapipe/tasks-audio@1.2.0") ||
     !main.includes("audio_bundle.js") ||
+    !main.includes("__nextGenKokoroBaseOptionsPatch") ||
+    !main.includes("this.setExternalFile(modelPath)") ||
     !main.includes("getMediaPipeAudioApi") ||
     !main.includes("kokoro_int8_fp16.litertlm") ||
     !main.includes("TextToSpeech.createFromOptions") ||
