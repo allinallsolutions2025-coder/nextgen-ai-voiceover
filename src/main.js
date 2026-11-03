@@ -4,7 +4,7 @@ import { getCompleteVoiceCatalog } from "./lib/voice-catalog.js";
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
-const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.all.js";
+const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 
@@ -430,7 +430,7 @@ async function generateAudio() {
       outputFormat
     });
 
-    setStatus("Packaging the full-script and paragraph WAV files…");
+    setStatus("Packaging the full-script and paragraph " + formatLabel(outputFormat) + " files…");
     setProgress(96);
     const JSZip = await getJSZip();
     const zip = new JSZip();

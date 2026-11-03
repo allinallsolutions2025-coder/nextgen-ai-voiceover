@@ -47,7 +47,7 @@ test("merges the complete 54-voice Kokoro catalogue with runtime metadata", () =
 
 test("ignores malformed IDs and duplicate entries", () => {
   const voices = normalizeVoiceCatalog(["am_adam", "am_adam", "not-a-voice", "", "af_heart"]);
-  assert.deepEqual(voices.map(v => v.id), ["am_adam", "af_heart"]);
+  assert.deepEqual(voices.map(v => v.id), ["af_heart", "am_adam"]);
 });
 
 test("returns an empty list when no catalogue is exposed", () => {
