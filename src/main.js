@@ -327,12 +327,77 @@ async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
     // The module-mode WASM build is shipped alongside the default WASM build.
     // LiteRT-LM model tasks use the module-mode runtime.
     const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM);
-    // Use the CPU-compatible Kokoro bundle for broad browser compatibility.
-    // The GPU-specific bundle is not needed for this browser WASM path.
-    const delegate = "CPU";
+
+    // MediaPipe's current web wrapper copies LiteRT-LM downloads to a generic
+    // /model.litertlm name. Kokoro's bundle uses its original filename for
+    // model detection, so keep that name in the WASM virtual filesystem.
+    const ttsPrototype = api.TextToSpeech.prototype;
+    if (!ttsPrototype.__nextGenKokoroFilenamePatch) {
+      Object.defineProperty(ttsPrototype, "__nextGenKokoroFilenamePatch", { value: true });
+      ttsPrototype.setOptions = async function (options) {
+        if (this.ttsPtr !== 0) {
+          throw new Error("TextToSpeech does not support updating options after initialization.");
+        }
+
+        this.delegateType = options.baseOptions?.delegate === "GPU" ? 0 : -1;
+        this.defaultVoiceId = options.defaultVoiceId ?? "";
+        this.defaultLocale = options.defaultLocale ?? "";
+        this.speakingRate = options.speakingRate ?? 1;
+        this.targetBucket = options.targetBucket ?? 0;
+        this.cacheDirectory = options.cacheDirectory ?? "";
+
+        const source = options.baseOptions?.modelAssetPath;
+        const buffer = options.baseOptions?.modelAssetBuffer;
+        if (!source && !buffer) {
+          throw new Error("A Kokoro .litertlm model path or buffer is required.");
+        }
+
+        let bytes;
+        let filename = "kokoro_int8_fp16.litertlm";
+        if (source) {
+          const sourceUrl = new URL(String(source), window.location.href);
+          filename = decodeURIComponent(sourceUrl.pathname.split("/").pop() || filename);
+          const response = await fetch(sourceUrl.toString(), { cache: "force-cache" });
+          if (!response.ok) {
+            throw new Error("Failed to download Kokoro model (" + response.status + ").");
+          }
+          bytes = new Uint8Array(await response.arrayBuffer());
+        } else {
+          bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        }
+
+        if (!filename.endsWith(".litertlm")) {
+          throw new Error("The downloaded Kokoro model must retain its .litertlm filename.");
+        }
+
+        const wasmModule = this.graphRunner.wasmModule;
+        const modelPath = "/" + filename;
+        try { wasmModule.FS_unlink(modelPath); } catch {}
+        wasmModule.FS_createDataFile(
+          "/",
+          filename,
+          bytes,
+          true,
+          false,
+          false
+        );
+
+        this.ttsPtr = await wasmModule.createTextToSpeech(
+          modelPath,
+          this.delegateType,
+          this.defaultVoiceId,
+          this.defaultLocale,
+          this.speakingRate,
+          this.targetBucket,
+          this.cacheDirectory
+        );
+        this.logger?.logSessionStart();
+      };
+    }
+
     const modelAssetPath = KOKORO_MULTILINGUAL_CPU_MODEL;
     const tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
-      baseOptions: { modelAssetPath, delegate },
+      baseOptions: { modelAssetPath, delegate: "CPU" },
       defaultVoiceId: "af_heart",
       speakingRate: requestedSpeed
     });

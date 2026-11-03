@@ -62,6 +62,11 @@ if (!main.includes("@mediapipe/tasks-audio@1.2.1-rc.20261102") ||
     !main.includes("forAudioTasks(MEDIAPIPE_WASM)")) {
   throw new Error("The full local MediaPipe Kokoro model and 54-voice catalogue are required.");
 }
+if (!main.includes("__nextGenKokoroFilenamePatch") ||
+    !main.includes("FS_createDataFile") ||
+    !main.includes("kokoro_int8_fp16.litertlm")) {
+  throw new Error("The local Kokoro model must retain its original .litertlm filename in WASM.");
+}
 if (!main.includes("generateMultilingualSpeechBlob") ||
     !main.includes("state.multilingualVoiceIds.has(voice)")) {
   throw new Error("The additional Kokoro voices must synthesize on-device without a server.");
