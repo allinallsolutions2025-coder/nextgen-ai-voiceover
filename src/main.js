@@ -1,3 +1,4 @@
+// Browser-local English synthesis plus an optional connected multilingual Kokoro API.
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 

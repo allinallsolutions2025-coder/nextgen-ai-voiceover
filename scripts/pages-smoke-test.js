@@ -151,7 +151,7 @@ try {
   assert.equal(voices.length, 28, "Expected only 28 browser-supported English voices to be selectable.");
   assert.equal(unavailableVoices.length, 26, "Expected 26 multilingual voices to be disabled until a server engine is connected.");
   assert.equal(report.requiredVoicesPresent, true, "One or more expected browser voices are missing.");
-  assert(unavailableVoices.every(option => option.label.includes("server required")), "Disabled multilingual options must explain why they cannot be selected.");
+  assert(unavailableVoices.every(option => option.label.includes("connect server")), "Disabled multilingual options must explain why they cannot be selected.");
   assert(unavailableVoices.some(option => option.id === "zf_xiaoyi" && option.disabled), "zf_xiaoyi must not be selectable in the English-only browser engine.");
   report.checks.multipleVoicesDiscovered = true;
   report.checks.onlyRuntimeSupportedVoicesSelectable = true;
