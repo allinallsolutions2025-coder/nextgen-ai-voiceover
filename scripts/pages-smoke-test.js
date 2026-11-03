@@ -138,16 +138,24 @@ try {
   assert.equal(report.checks.modelWeightsReusedAfterReload, true, "The large ONNX model was downloaded again after reload.");
 
   const voiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
-    id: option.value, label: option.textContent.trim()
+    id: option.value, label: option.textContent.trim(), disabled: option.disabled
   })));
-  const voices = voiceOptions.map(option => option.id);
-  report.voiceCount = voices.length;
+  const voices = voiceOptions.filter(option => !option.disabled).map(option => option.id);
+  const unavailableVoices = voiceOptions.filter(option => option.disabled);
+  report.voiceCount = voiceOptions.length;
+  report.runtimeVoiceCount = voices.length;
+  report.multilingualVoicesRequireServer = unavailableVoices.length;
   report.voiceSample = voiceOptions.slice(0, 12);
-  report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma", "bm_george", "hf_alpha", "hm_omega", "if_sara", "im_nicola", "jf_alpha", "jm_kumo", "pf_dora", "pm_alex", "zf_xiaobei", "zm_yunjian", "ef_dora", "em_alex", "ff_siwis"].every(id => voices.includes(id));
-  assert.equal(voices.length, 54, "Expected all 54 Kokoro voices, found " + voices.length + ".");
-  assert.equal(report.requiredVoicesPresent, true, "One or more expected voice IDs are missing.");
+  report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma", "bm_george"].every(id => voices.includes(id));
+  assert.equal(voiceOptions.length, 54, "Expected the full 54-entry Kokoro catalogue to remain visible.");
+  assert.equal(voices.length, 28, "Expected only 28 browser-supported English voices to be selectable.");
+  assert.equal(unavailableVoices.length, 26, "Expected 26 multilingual voices to be disabled until a server engine is connected.");
+  assert.equal(report.requiredVoicesPresent, true, "One or more expected browser voices are missing.");
+  assert(unavailableVoices.every(option => option.label.includes("server required")), "Disabled multilingual options must explain why they cannot be selected.");
+  assert(unavailableVoices.some(option => option.id === "zf_xiaoyi" && option.disabled), "zf_xiaoyi must not be selectable in the English-only browser engine.");
   report.checks.multipleVoicesDiscovered = true;
-  report.checks.all54VoicesAvailable = report.requiredVoicesPresent;
+  report.checks.onlyRuntimeSupportedVoicesSelectable = true;
+  report.checks.multilingualVoicesClearlyDisabled = true;
   assert.equal(await page.locator("#outputFormat option").count(), 2, "Expected WAV and MP3 output choices.");
 
   temporaryDirectory = await mkdtemp(join(tmpdir(), "nextgen-pages-test-"));

@@ -1,5 +1,5 @@
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
-import { getCompleteVoiceCatalog } from "./lib/voice-catalog.js";
+import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
@@ -36,6 +36,7 @@ const state = {
   TextSplitterStream: null,
   jsZipPromise: null,
   lamePromise: null,
+  supportedVoiceIds: new Set(),
   objectUrls: []
 };
 
@@ -142,8 +143,15 @@ async function getJSZip() {
 }
 
 function populateVoiceSelector(tts) {
-  const voices = getCompleteVoiceCatalog(tts.voices);
+  // The current Kokoro.js browser package supports the 28 English voice IDs returned
+  // by tts.voices. The broader 54-voice Kokoro catalogue includes 26 other-language
+  // presets, but these need a language-aware server pipeline and must not be selectable here.
+  const voices = normalizeVoiceCatalog(tts.voices);
+  const completeCatalog = getCompleteVoiceCatalog(tts.voices);
   if (!voices.length) throw new Error("Kokoro loaded, but its supported voice catalogue was empty.");
+  const supportedIds = new Set(voices.map((voice) => voice.id));
+  state.supportedVoiceIds = supportedIds;
+  const unavailableVoices = completeCatalog.filter((voice) => !supportedIds.has(voice.id));
 
   const groups = new Map();
   for (const voice of voices) {
@@ -164,10 +172,25 @@ function populateVoiceSelector(tts) {
     elements.voiceSelect.append(group);
   }
 
-  const preferred = voices.some((voice) => voice.id === "am_adam") ? "am_adam" : voices[0].id;
+  if (unavailableVoices.length) {
+    const unavailableGroup = document.createElement("optgroup");
+    unavailableGroup.label = "Multilingual voices — server required (" + unavailableVoices.length + ")";
+    for (const voice of unavailableVoices) {
+      const option = document.createElement("option");
+      option.value = voice.id;
+      option.disabled = true;
+      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") — server required";
+      unavailableGroup.append(option);
+    }
+    elements.voiceSelect.append(unavailableGroup);
+  }
+
+  const preferred = voices.some((voice) => voice.id === "af_heart") ? "af_heart" : voices[0].id;
   elements.voiceSelect.value = preferred;
   elements.voiceSelect.disabled = false;
-  elements.voiceHelp.textContent = voices.length + " voices · " + [...groups.keys()].join(" · ");
+  elements.voiceHelp.textContent =
+    voices.length + " browser-ready voices · " + unavailableVoices.length +
+    " multilingual voices need a server engine · " + [...groups.keys()].join(" · ");
 }
 
 async function loadModel() {
@@ -185,7 +208,7 @@ async function loadModel() {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus("Voice model ready. Your script can now be generated in this browser.", "good");
+    setStatus("Voice model ready. Enabled English voices can be generated in this browser; the multilingual presets are shown as unavailable until a multilingual server engine is connected.", "good");
     elements.generateButton.disabled = false;
     setProgress(100);
   } catch (error) {
@@ -379,6 +402,9 @@ async function generateAudio() {
     if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
     const voice = elements.voiceSelect.value || "af_heart";
+    if (!state.supportedVoiceIds.has(voice)) {
+      throw new Error("Voice " + voice + " is not supported by this browser engine. Select one of the enabled English voices; multilingual voices require a multilingual server engine.");
+    }
     const speed = Number(elements.speedInput.value);
     if (outputFormat === "mp3") {
       setStatus("Preparing the MP3 encoder…");

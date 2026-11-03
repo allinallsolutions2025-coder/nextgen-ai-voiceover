@@ -39,7 +39,8 @@ if (!main.includes('device: "wasm"')) throw new Error("The baseline browser test
 if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The speed control must support 0.50×–2.00×.");
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
 if (!main.includes("await loadModel();") || !main.includes("navigator.storage.persist")) throw new Error("The model must restore automatically and request persistent browser storage.");
-if (!main.includes("getCompleteVoiceCatalog(tts.voices)")) throw new Error("The app must expose the complete Kokoro voice catalogue.");
+if (!main.includes("normalizeVoiceCatalog(tts.voices)")) throw new Error("The app must only enable voices supported by the browser runtime.");
+if (!main.includes("unavailableGroup") || !main.includes("server required") || !main.includes("state.supportedVoiceIds.has(voice)")) throw new Error("Unsupported multilingual voices must be clearly disabled before synthesis.");
 if (!main.includes("LAMEJS_CDN") || !main.includes("createMp3BlobFromSamples")) throw new Error("MP3 export support is missing.");
 if (!html.includes('id="outputFormat"') || !html.includes('value="mp3"')) throw new Error("A user-selectable output format is required.");
 const voiceCatalog = await readFile(new URL("../src/lib/voice-catalog.js", import.meta.url), "utf8");
