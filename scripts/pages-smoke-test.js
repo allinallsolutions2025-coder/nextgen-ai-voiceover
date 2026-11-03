@@ -324,6 +324,7 @@ try {
   await page.locator("#connectServerButton").click();
   assert.equal(await page.locator("#voiceSelect option[value='zf_xiaoyi']").isDisabled(), true);
   report.checks.multilingualServerDisconnectWorks = true;
+  await page.locator("#outputFormat").selectOption("wav");
 
   // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];
