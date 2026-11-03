@@ -125,14 +125,14 @@ try {
   report.cacheStorageKeys = await page.evaluate(() => window.caches ? caches.keys() : []);
   report.checks.browserModelCacheAvailable = report.cacheStorageKeys.includes("transformers-cache");
   assert.equal(report.checks.browserModelCacheAvailable, true, "Transformers.js browser model cache was not created.");
-  const largeModelResponsesBeforeReload = report.network.filter(item => /cdn\\.hf\\.co/.test(item.url) && Number(item.contentLength || 0) > 10000000).length;
+  const largeModelResponsesBeforeReload = report.network.filter(item => item.url.includes("cdn.hf.co") && Number(item.contentLength || 0) > 10000000).length;
   await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForFunction(() => {
     const badge = document.querySelector("#modelBadge")?.textContent || "";
     return badge.includes("Model ready") || badge.includes("Model load failed");
   }, null, { timeout: 8 * 60 * 1000 });
   assert((await page.locator("#modelBadge").innerText()).includes("Model ready"), "Cached model failed to restore after reload.");
-  const largeModelResponsesAfterReload = report.network.filter(item => /cdn\\.hf\\.co/.test(item.url) && Number(item.contentLength || 0) > 10000000).length;
+  const largeModelResponsesAfterReload = report.network.filter(item => item.url.includes("cdn.hf.co") && Number(item.contentLength || 0) > 10000000).length;
   report.checks.modelWeightsReusedAfterReload = largeModelResponsesAfterReload === largeModelResponsesBeforeReload;
   assert.equal(report.checks.modelWeightsReusedAfterReload, true, "The large ONNX model was downloaded again after reload.");
 
