@@ -9,6 +9,8 @@ const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
+const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
+const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
@@ -17,11 +19,15 @@ const elements = {
   paragraphCount: document.querySelector("#paragraphCount"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceHelp: document.querySelector("#voiceHelp"),
+  previewVoiceButton: document.querySelector("#previewVoiceButton"),
+  voicePreviewAudio: document.querySelector("#voicePreviewAudio"),
+  draftStatus: document.querySelector("#draftStatus"),
   outputFormat: document.querySelector("#outputFormat"),
   speedInput: document.querySelector("#speedInput"),
   speedValue: document.querySelector("#speedValue"),
   loadButton: document.querySelector("#loadButton"),
   generateButton: document.querySelector("#generateButton"),
+  cancelButton: document.querySelector("#cancelButton"),
   clearButton: document.querySelector("#clearButton"),
   progressTrack: document.querySelector("#progressTrack"),
   progressBar: document.querySelector("#progressBar"),
@@ -47,7 +53,12 @@ const state = {
   serverVoiceIds: new Set(),
   serverApiBase: "",
   serverReady: false,
-  objectUrls: []
+  objectUrls: [],
+  previewObjectUrl: null,
+  previewController: null,
+  activeAbortController: null,
+  isGenerating: false,
+  isPreviewing: false
 };
 
 function setStatus(message, kind = "normal") {
@@ -64,6 +75,48 @@ function setProgress(value) {
 function setBadge(label, kind) {
   elements.modelBadge.textContent = label;
   elements.modelBadge.className = "badge badge-" + kind;
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    const error = new Error("Generation stopped by the user.");
+    error.name = "AbortError";
+    throw error;
+  }
+}
+
+function setDraftStatus(message, kind = "normal") {
+  elements.draftStatus.textContent = message;
+  elements.draftStatus.className = "draft-status" + (kind === "error" ? " draft-status-error" : "");
+}
+
+function saveDraftLocally() {
+  const value = elements.scriptInput.value;
+  try {
+    if (value) localStorage.setItem(DRAFT_STORAGE_KEY, value);
+    else localStorage.removeItem(DRAFT_STORAGE_KEY);
+    setDraftStatus(value ? "Draft saved on this device" : "Draft cleared from this device");
+  } catch {
+    setDraftStatus("Local draft saving is unavailable", "error");
+  }
+}
+
+function restoreDraftLocally() {
+  try {
+    const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (savedDraft && !elements.scriptInput.value) {
+      elements.scriptInput.value = savedDraft;
+      setDraftStatus("Draft restored from this device");
+    }
+  } catch {
+    setDraftStatus("Local draft storage is unavailable", "error");
+  }
+}
+
+function updatePreviewButtonState() {
+  const voice = elements.voiceSelect.value;
+  const isAvailable = state.supportedVoiceIds.has(voice) || state.serverVoiceIds.has(voice);
+  elements.previewVoiceButton.disabled = !voice || !isAvailable || state.isGenerating || state.isPreviewing;
 }
 
 function revokeObjectUrls() {
@@ -217,6 +270,7 @@ function populateVoiceSelector(tts = null) {
     (state.serverReady ? serverVoices.length + " multilingual server voices connected" :
       unavailableVoices.length + " multilingual voices need a server") +
     (groups.size ? " · " + [...groups.keys()].join(" · ") : "");
+  updatePreviewButtonState();
 }
 
 function normalizeServerBaseUrl(value) {
@@ -363,7 +417,7 @@ function createWavBlobFromSamples(samples, sampleRate) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-async function generateSpeechBlob(tts, text, options, outputFormat) {
+async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
   if (typeof tts.stream !== "function") {
     throw new Error("This Kokoro runtime does not support streaming audio generation.");
   }
@@ -380,6 +434,7 @@ async function generateSpeechBlob(tts, text, options, outputFormat) {
   let totalSamples = 0;
 
   for await (const item of tts.stream(splitter, options)) {
+    throwIfAborted(signal);
     const raw = item?.audio?.audio;
     const rate = Number(item?.audio?.sampling_rate);
     if (!raw || !ArrayBuffer.isView(raw) || !Number.isFinite(rate)) {
@@ -394,6 +449,7 @@ async function generateSpeechBlob(tts, text, options, outputFormat) {
     totalSamples += samples.length;
   }
 
+  throwIfAborted(signal);
   if (!waveChunks.length || !sampleRate) {
     throw new Error("The voice engine returned no audio chunks.");
   }
@@ -411,14 +467,15 @@ async function generateSpeechBlob(tts, text, options, outputFormat) {
   return createWavBlobFromSamples(combined, sampleRate);
 }
 
-async function generateRemoteSpeechBlob(text, voice, speed, outputFormat) {
+async function generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal) {
   if (!state.serverReady || !state.serverApiBase) {
     throw new Error("The multilingual server is not connected. Connect or refresh it, then try again.");
   }
   const response = await fetch(state.serverApiBase + "/v1/audio/speech", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...serverHeaders() },
-    body: JSON.stringify({ input: text, voice, speed })
+    body: JSON.stringify({ input: text, voice, speed }),
+    signal
   });
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 300);
@@ -440,11 +497,56 @@ async function generateRemoteSpeechBlob(text, voice, speed, outputFormat) {
   }
 }
 
-async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat) {
+async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat, signal) {
+  throwIfAborted(signal);
   if (state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice)) {
-    return generateRemoteSpeechBlob(text, voice, speed, outputFormat);
+    return generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal);
   }
-  return generateSpeechBlob(tts, text, { voice, speed }, outputFormat);
+  return generateSpeechBlob(tts, text, { voice, speed }, outputFormat, signal);
+}
+
+async function previewSelectedVoice() {
+  if (state.isGenerating || state.isPreviewing) return;
+  const voice = elements.voiceSelect.value;
+  if (!voice) return;
+
+  const controller = new AbortController();
+  state.previewController = controller;
+  state.isPreviewing = true;
+  elements.previewVoiceButton.disabled = true;
+  elements.previewVoiceButton.textContent = "Generating preview…";
+
+  try {
+    const remoteVoice = state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
+    const tts = remoteVoice ? null : (state.tts || await getTTS());
+    const blob = await generateSelectedSpeechBlob(
+      tts, PREVIEW_TEXT, voice, Number(elements.speedInput.value), "wav", controller.signal
+    );
+    throwIfAborted(controller.signal);
+
+    if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
+    state.previewObjectUrl = URL.createObjectURL(blob);
+    elements.voicePreviewAudio.src = state.previewObjectUrl;
+    elements.voicePreviewAudio.hidden = false;
+    try {
+      await elements.voicePreviewAudio.play();
+    } catch {
+      // The preview remains ready in the audio player when autoplay is blocked.
+    }
+    setStatus("Voice preview ready: " + voice + ". Try another voice to compare.", "good");
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      setStatus("Voice preview stopped.", "normal");
+    } else {
+      console.error(error);
+      setStatus("Could not preview this voice: " + (error?.message || String(error)), "error");
+    }
+  } finally {
+    state.isPreviewing = false;
+    state.previewController = null;
+    elements.previewVoiceButton.textContent = "Preview voice";
+    updatePreviewButtonState();
+  }
 }
 
 async function createMp3BlobFromSamples(samples, sampleRate) {
@@ -531,6 +633,12 @@ async function generateAudio() {
   }
 
   clearResults();
+  const controller = new AbortController();
+  state.activeAbortController = controller;
+  state.isGenerating = true;
+  elements.cancelButton.hidden = false;
+  elements.cancelButton.disabled = false;
+  elements.previewVoiceButton.disabled = true;
   elements.generateButton.disabled = true;
   elements.loadButton.disabled = true;
   elements.scriptInput.disabled = true;
@@ -571,7 +679,10 @@ async function generateAudio() {
         (useServer ? " on the multilingual server…" : "…"));
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const audioBlob = await generateSelectedSpeechBlob(tts, validation.paragraphs[index], voice, speed, outputFormat);
+      const audioBlob = await generateSelectedSpeechBlob(
+        tts, validation.paragraphs[index], voice, speed, outputFormat, controller.signal
+      );
+      throwIfAborted(controller.signal);
       outputBlobs.push(audioBlob);
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + extension;
       addAudioResult({
@@ -594,7 +705,10 @@ async function generateAudio() {
     } else {
       setStatus("Generating one continuous voiceover for the complete script…");
       await new Promise((resolve) => setTimeout(resolve, 0));
-      fullScriptBlob = await generateSelectedSpeechBlob(tts, scriptForSpeech, voice, speed, outputFormat);
+      fullScriptBlob = await generateSelectedSpeechBlob(
+        tts, scriptForSpeech, voice, speed, outputFormat, controller.signal
+      );
+      throwIfAborted(controller.signal);
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
@@ -631,23 +745,42 @@ async function generateAudio() {
     setProgress(100);
     setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete " + formatLabel(outputFormat) + " bundle.", "good");
   } catch (error) {
-    console.error(error);
-    setProgress(0);
-    setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed paragraph WAV files remain available below.", "error");
+    if (controller.signal.aborted || error?.name === "AbortError") {
+      setStatus("Generation stopped. Completed paragraph audio remains available below.", "normal");
+    } else {
+      console.error(error);
+      setProgress(0);
+      setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed paragraph audio remains available below.", "error");
+    }
     elements.resultsPanel.hidden = elements.audioResults.childElementCount === 0;
   } finally {
+    state.isGenerating = false;
+    state.activeAbortController = null;
+    elements.cancelButton.hidden = true;
+    elements.cancelButton.disabled = true;
     elements.generateButton.disabled = !state.tts && !state.serverReady;
     elements.loadButton.disabled = Boolean(state.tts);
     elements.scriptInput.disabled = false;
     elements.voiceSelect.disabled = !state.tts && !state.serverReady;
     elements.speedInput.disabled = false;
     elements.outputFormat.disabled = false;
+    updatePreviewButtonState();
   }
 }
 
 elements.scriptInput.addEventListener("input", () => {
   updateScriptCounts();
+  saveDraftLocally();
   clearResults();
+});
+
+elements.voiceSelect.addEventListener("change", updatePreviewButtonState);
+elements.previewVoiceButton.addEventListener("click", previewSelectedVoice);
+elements.cancelButton.addEventListener("click", () => {
+  if (!state.activeAbortController) return;
+  state.activeAbortController.abort();
+  elements.cancelButton.disabled = true;
+  setStatus("Stopping after the current speech chunk…");
 });
 
 elements.outputFormat.addEventListener("change", () => clearResults());
@@ -662,13 +795,20 @@ elements.connectServerButton.addEventListener("click", () => void connectServer(
 
 elements.clearButton.addEventListener("click", () => {
   elements.scriptInput.value = "";
+  saveDraftLocally();
   updateScriptCounts();
   clearResults();
   setStatus("Script cleared. The loaded voice model remains ready in this tab.");
   setProgress(0);
 });
 
+restoreDraftLocally();
 updateScriptCounts();
+
+window.addEventListener("beforeunload", () => {
+  revokeObjectUrls();
+  if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
+});
 
 if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
   setStatus("Open this app over HTTPS or localhost for browser model compatibility.", "error");
@@ -681,7 +821,11 @@ if (!window.isSecureContext && location.hostname !== "localhost" && location.hos
     } catch (error) {
       console.info("Persistent browser storage was not granted.", error);
     }
-    elements.serverApiUrl.value = localStorage.getItem("nextgen-kokoro-server-url") || "";
+    try {
+      elements.serverApiUrl.value = localStorage.getItem("nextgen-kokoro-server-url") || "";
+    } catch {
+      elements.serverApiUrl.value = "";
+    }
     elements.serverApiKey.value = "";
     if (elements.serverApiUrl.value) await connectServer({ silent: true });
     await loadModel();

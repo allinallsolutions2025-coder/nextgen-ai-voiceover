@@ -7,6 +7,9 @@ Browser-first Kokoro text-to-speech studio with an optional multilingual Kokoro 
 - **Browser engine:** Kokoro.js 1.2.1 with the ONNX q8 model and WASM. It generates the 28 English voices registered by the browser package locally.
 - **Multilingual engine:** an optional FastAPI backend using the Kokoro Python pipeline across nine language codes. It checks each language by generating a sample before publishing any server voices to the studio.
 - Voice choices are enabled only when a connected engine reports them. A voice is not made available just because its ID exists in a static catalogue.
+- The selected voice can be auditioned with a short sample before generating the full script.
+- Script drafts are automatically saved in local browser storage and restored on return. Drafts are not uploaded to GitHub Pages or sent to the speech model unless the user chooses a remote voice.
+- Long generation jobs can be stopped; completed paragraph audio remains available.
 
 The broader Kokoro v1.0 ecosystem documents nine language groups and 54 voice assets. The JavaScript browser package used here registers 28 English voice IDs, so other languages use the Python pipeline and its language-specific text processing. See the [official Kokoro voice catalogue](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) and [Kokoro Python pipeline](https://github.com/hexgrad/kokoro).
 
@@ -55,7 +58,7 @@ GitHub Pages publishes only `dist/`; backend files, docs and workflow files rema
 
 ## Current limitations
 
-- No accounts, billing, saved cloud history or server-side usage enforcement.
+- No accounts, billing, cloud-synced history or server-side usage enforcement. Script draft autosave is local to the current browser profile.
 - Browser model/voice assets remain subject to browser cache eviction.
 - The multilingual backend is not live until you create a Space, add `HF_TOKEN` to GitHub Actions secrets, and run the deployment workflow.
 - CPU-only hosting can have cold starts and slower synthesis. The app enables only languages and voices that pass the server's runtime checks.

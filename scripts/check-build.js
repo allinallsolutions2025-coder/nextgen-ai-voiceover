@@ -32,6 +32,10 @@ const requiredHtmlMarkers = [
   'id="serverApiUrl"',
   'id="serverApiKey"',
   'id="connectServerButton"',
+  'id="draftStatus"',
+  'id="previewVoiceButton"',
+  'id="voicePreviewAudio"',
+  'id="cancelButton"',
   'src="./src/main.js"',
   'href="./src/styles.css"'
 ];
@@ -47,6 +51,9 @@ if (!main.includes("kokoro-js@1.2.1")) throw new Error("The Kokoro.js runtime is
 if (!main.includes('device: "wasm"')) throw new Error("The baseline browser test must explicitly use WASM.");
 if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The speed control must support 0.50×–2.00×.");
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
+if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") || !main.includes("nextgen-voiceover-draft-v1")) throw new Error("Local script draft save and recovery are required.");
+if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
+if (!main.includes("activeAbortController") || !main.includes("Generation stopped.")) throw new Error("Generation cancellation is required.");
 if (!main.includes("await loadModel();") || !main.includes("navigator.storage.persist")) throw new Error("The model must restore automatically and request persistent browser storage.");
 if (!main.includes("normalizeVoiceCatalog(tts?.voices ?? [])")) throw new Error("The app must enable only voices reported by a real runtime.");
 if (!main.includes("serverVoices") || !main.includes("connectServer") || !main.includes("generateRemoteSpeechBlob")) throw new Error("The multilingual backend connection and remote synthesis path are missing.");

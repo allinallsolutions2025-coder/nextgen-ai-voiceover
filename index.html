@@ -75,6 +75,7 @@
               <span class="footer-divider">·</span>
               <span id="characterCount">0 / 20,000 characters</span>
               <span class="editor-spacer"></span>
+              <span id="draftStatus" class="draft-status" role="status">Drafts are saved only in this browser</span>
               <span>Up to 20,000 characters</span>
             </div>
           </section>
@@ -106,6 +107,10 @@
               <select id="voiceSelect" disabled>
                 <option value="">Voice list loads automatically…</option>
               </select>
+              <div class="voice-preview-row">
+                <button id="previewVoiceButton" class="button button-secondary preview-voice-button" type="button" disabled>Preview voice</button>
+                <audio id="voicePreviewAudio" class="voice-preview-audio" controls preload="none" hidden aria-label="Selected voice preview"></audio>
+              </div>
               <small id="voiceHelp">28 browser-ready voices are generated locally. Connect a multilingual engine to enable the other languages.</small>
             </div>
 
@@ -142,6 +147,7 @@
             <button id="generateButton" class="button button-primary generate-button" type="button" disabled>
               <span aria-hidden="true">✦</span> Generate voiceover
             </button>
+            <button id="cancelButton" class="button button-secondary cancel-button" type="button" hidden disabled>Stop generation</button>
 
             <div class="progress-wrap" aria-live="polite">
               <div class="progress-track" role="progressbar" aria-label="Generation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">

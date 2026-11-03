@@ -137,6 +137,13 @@ try {
   const largeModelResponsesAfterReload = report.network.filter(item => item.url.includes("cdn.hf.co") && Number(item.contentLength || 0) > 10000000).length;
   report.checks.modelWeightsReusedAfterReload = largeModelResponsesAfterReload === largeModelResponsesBeforeReload;
   assert.equal(report.checks.modelWeightsReusedAfterReload, true, "The large ONNX model was downloaded again after reload.");
+  report.checks.voicePreviewControlsPresent =
+    await page.locator("#previewVoiceButton, #voicePreviewAudio").count() === 2;
+  assert.equal(report.checks.voicePreviewControlsPresent, true, "Voice preview controls are missing.");
+  report.checks.cancelControlPresent = await page.locator("#cancelButton").count() === 1;
+  assert.equal(report.checks.cancelControlPresent, true, "Generation stop control is missing.");
+  report.checks.localDraftStatusPresent = await page.locator("#draftStatus").count() === 1;
+  assert.equal(report.checks.localDraftStatusPresent, true, "Local draft status is missing.");
 
   const voiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
     id: option.value, label: option.textContent.trim(), disabled: option.disabled
@@ -165,9 +172,28 @@ try {
   await page.locator("#voiceSelect").selectOption("am_adam");
   const firstParagraph = "This is the first short paragraph for the voiceover export test.";
   const secondParagraph = "This is the second paragraph. The full script should also be generated as one continuous voiceover.";
-  await page.locator("#scriptInput").fill(firstParagraph + "\n\n" + secondParagraph);
+  const draftText = firstParagraph + "\n\n" + secondParagraph;
+  await page.locator("#scriptInput").fill(draftText);
   report.scriptParagraphCharacterCounts = [firstParagraph.length, secondParagraph.length];
   assert.equal(await page.locator("#paragraphCount").innerText(), "2 paragraphs");
+  assert.equal(await page.evaluate(() => localStorage.getItem("nextgen-voiceover-draft-v1")), draftText,
+    "The script draft was not saved locally.");
+  report.checks.localDraftAutosave = true;
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
+  await page.waitForFunction(() => (document.querySelector("#modelBadge")?.textContent || "").includes("Model ready"),
+    null, { timeout: 8 * 60 * 1000 });
+  assert.equal(await page.locator("#scriptInput").inputValue(), draftText, "The local script draft was not restored after reload.");
+  report.checks.localDraftRecovery = true;
+  await page.locator("#voiceSelect").selectOption("am_adam");
+  await page.locator("#previewVoiceButton").click();
+  await page.waitForFunction(() => {
+    const player = document.querySelector("#voicePreviewAudio");
+    return player && !player.hidden && player.src.startsWith("blob:");
+  }, null, { timeout: 120000 });
+  const voicePreview = await inspectAudio(page, "#voicePreviewAudio");
+  assert(voicePreview.validWav && voicePreview.sizeBytes > 44, "Voice preview did not generate a valid WAV.");
+  report.voicePreview = voicePreview;
+  report.checks.selectedVoicePreview = true;
   await page.locator("#generateButton").click();
   await waitForGeneration(page);
 
