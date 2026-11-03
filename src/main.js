@@ -319,7 +319,9 @@ async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
 
   state.multilingualTtsPromise = (async () => {
     const module = await import(MEDIAPIPE_CDN);
-    const api = module.default || module;
+    const api = module.FilesetResolver && module.TextToSpeech
+      ? module
+      : (module.default || module);
     if (!api.FilesetResolver || !api.TextToSpeech) {
       throw new Error("MediaPipe Tasks Audio did not expose FilesetResolver and TextToSpeech.");
     }

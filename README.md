@@ -66,3 +66,8 @@ GitHub Pages publishes only `dist/`; backend files, docs and workflow files rema
 - CPU-only hosting can have cold starts and slower synthesis. The app enables only languages and voices that pass the server's runtime checks.
 - When a server voice is selected, the script text is sent to the configured API endpoint. Browser voices remain local to your device.
 - This is a prototype, not a production SaaS. Do not commit API keys, Hugging Face tokens, private scripts or generated user audio.
+
+
+## Local multilingual model attribution
+
+The optional browser-local 54-voice pack uses the [LiteRT Community Kokoro-82M model](https://huggingface.co/litert-community/Kokoro-82M), published under Apache 2.0. The web runtime is [MediaPipe Tasks Audio](https://www.npmjs.com/package/@mediapipe/tasks-audio), also Apache 2.0. The model bundle is downloaded from Hugging Face on first use; synthesis itself runs on the user's device.
