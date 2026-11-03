@@ -5,7 +5,7 @@ Browser-first Kokoro text-to-speech studio with an optional multilingual Kokoro 
 ## Voice engines
 
 - **English browser engine:** Kokoro.js 1.2.1 with the ONNX q8 model and WASM. It generates 28 English voices locally.
-- **Full local multilingual engine:** MediaPipe Tasks Audio 1.2.1-rc.20261102 with the LiteRT Kokoro-82M bundle. It loads all 54 voices and nine locales directly in the browser, using WebGPU where available and a CPU-compatible model otherwise. No speech server or API key is required.
+- **Full local multilingual engine:** MediaPipe Tasks Audio 1.2.1-rc.20261102 with the LiteRT Kokoro-82M CPU-compatible bundle and module-mode WASM runtime. It is designed to load all 54 voices and nine locales directly in the browser without a speech server or API key.
 - **Optional remote engine:** a FastAPI backend using the Kokoro Python pipeline remains available for advanced deployments, but it is not required for any of the built-in Kokoro voices.
 - Voice choices are enabled only when a connected engine reports them. A voice is not made available just because its ID exists in a static catalogue.
 - The selected voice can be auditioned with a short sample before generating the full script.
@@ -60,7 +60,7 @@ GitHub Pages publishes only `dist/`; backend files, docs and workflow files rema
 ## Current limitations
 
 - No accounts, billing, cloud-synced history or server-side usage enforcement. Script draft autosave is local to the current browser profile.
-- The multilingual LiteRT model needs a first-time download of approximately 295 MB and enough device memory for local inference. WebGPU is preferred where available; CPU fallback may be slower.
+- The multilingual LiteRT model needs a first-time download of approximately 295 MB and enough device memory for local CPU inference.
 - Browser model/voice assets remain subject to browser cache eviction.
 - The multilingual backend is not live until you create a Space, add `HF_TOKEN` to GitHub Actions secrets, and run the deployment workflow.
 - CPU-only hosting can have cold starts and slower synthesis. The app enables only languages and voices that pass the server's runtime checks.

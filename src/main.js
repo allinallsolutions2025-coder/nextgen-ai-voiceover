@@ -9,7 +9,6 @@ const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
 const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.1-rc.20261102/+esm";
 const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.1-rc.20261102/wasm";
-const KOKORO_MULTILINGUAL_GPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_gpu_fp16.litertlm";
 const KOKORO_MULTILINGUAL_CPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
@@ -325,29 +324,18 @@ async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
     if (!api.FilesetResolver || !api.TextToSpeech) {
       throw new Error("MediaPipe Tasks Audio did not expose FilesetResolver and TextToSpeech.");
     }
-    const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM);
-    const hasWebGPU = Boolean(navigator.gpu);
-    let delegate = hasWebGPU ? "GPU" : "CPU";
-    let modelAssetPath = hasWebGPU ? KOKORO_MULTILINGUAL_GPU_MODEL : KOKORO_MULTILINGUAL_CPU_MODEL;
-    let tts;
-    try {
-      tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
-        baseOptions: { modelAssetPath, delegate },
-        defaultVoiceId: "af_heart",
-        speakingRate: requestedSpeed
-      });
-    } catch (gpuError) {
-      if (!hasWebGPU) throw gpuError;
-      elements.multilingualModelStatus.textContent =
-        "GPU initialization was unavailable. Switching to the CPU-compatible local model…";
-      delegate = "CPU";
-      modelAssetPath = KOKORO_MULTILINGUAL_CPU_MODEL;
-      tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
-        baseOptions: { modelAssetPath, delegate },
-        defaultVoiceId: "af_heart",
-        speakingRate: requestedSpeed
-      });
-    }
+    // The module-mode WASM build is shipped alongside the default WASM build.
+    // LiteRT-LM model tasks use the module-mode runtime.
+    const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM, true);
+    // Use the CPU-compatible Kokoro bundle for broad browser compatibility.
+    // The GPU-specific bundle is not needed for this browser WASM path.
+    const delegate = "CPU";
+    const modelAssetPath = KOKORO_MULTILINGUAL_CPU_MODEL;
+    const tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
+      baseOptions: { modelAssetPath, delegate },
+      defaultVoiceId: "af_heart",
+      speakingRate: requestedSpeed
+    });
 
     const runtimeVoices = await tts.listVoices();
     const knownIds = new Set(getCompleteVoiceCatalog().map((voice) => voice.id));

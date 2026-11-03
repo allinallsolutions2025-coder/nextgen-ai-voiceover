@@ -56,10 +56,10 @@ if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = t
 if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") || !main.includes("nextgen-voiceover-draft-v1")) throw new Error("Local script draft save and recovery are required.");
 if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
 if (!main.includes("@mediapipe/tasks-audio@1.2.1-rc.20261102") ||
-    !main.includes("kokoro_int8_gpu_fp16.litertlm") ||
     !main.includes("kokoro_int8_fp16.litertlm") ||
     !main.includes("TextToSpeech.createFromOptions") ||
-    !main.includes("tts.listVoices()")) {
+    !main.includes("tts.listVoices()") ||
+    !main.includes("forAudioTasks(MEDIAPIPE_WASM, true)")) {
   throw new Error("The full local MediaPipe Kokoro model and 54-voice catalogue are required.");
 }
 if (!main.includes("generateMultilingualSpeechBlob") ||
