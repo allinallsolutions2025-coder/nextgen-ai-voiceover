@@ -194,6 +194,13 @@ try {
   assert(voicePreview.validWav && voicePreview.sizeBytes > 44, "Voice preview did not generate a valid WAV.");
   report.voicePreview = voicePreview;
   report.checks.selectedVoicePreview = true;
+  // Model initialization sets the ready badge just before the generate button is enabled.
+  // Wait for the real control state before clicking so Playwright cannot silently click a disabled button.
+  await page.waitForFunction(() => {
+    const button = document.querySelector("#generateButton");
+    return button && !button.disabled;
+  }, null, { timeout: 30000 });
+  report.checks.generateEnabledAfterPreview = true;
   await page.locator("#generateButton").click();
   await waitForGeneration(page);
 
