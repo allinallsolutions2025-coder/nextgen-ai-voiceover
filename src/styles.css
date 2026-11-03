@@ -226,3 +226,15 @@ input[type="range"] { display: block; width: 100%; margin: 13px 0 0; accent-colo
 @media (max-width: 820px) {
   .voice-preview-row { grid-column: 1 / -1; }
 }
+
+
+/* On-device multilingual voice pack. */
+.multilingual-local-field { margin-top: 18px; }
+.multilingual-load-button { width: 100%; min-height: 38px; margin-top: 8px; font-size: 9px; }
+.multilingual-local-field small[role="status"] { color: #b7a9ff; overflow-wrap: anywhere; }
+@media (max-width: 820px) {
+  .multilingual-local-field { grid-column: 1 / -1; margin-top: 0; }
+}
+@media (max-width: 560px) {
+  .multilingual-local-field { margin-top: 18px; }
+}

@@ -111,7 +111,13 @@
                 <button id="previewVoiceButton" class="button button-secondary preview-voice-button" type="button" disabled>Preview voice</button>
                 <audio id="voicePreviewAudio" class="voice-preview-audio" controls preload="none" hidden aria-label="Selected voice preview"></audio>
               </div>
-              <small id="voiceHelp">28 browser-ready voices are generated locally. Connect a multilingual engine to enable the other languages.</small>
+              <small id="voiceHelp">28 English voices run in your browser. Load the multilingual model to unlock 26 more voices across seven additional languages.</small>
+            </div>
+
+            <div class="field multilingual-local-field">
+              <label>More voices · run on this device</label>
+              <button id="loadMultilingualButton" class="button button-secondary multilingual-load-button" type="button">Load 26 additional voices locally</button>
+              <small id="multilingualModelStatus" role="status">Optional first-time download: approximately 295 MB. Speech is generated on your device; no voice server or API key is needed.</small>
             </div>
 
             <div class="field server-connection-field">
@@ -119,8 +125,8 @@
               <input id="serverApiUrl" type="url" placeholder="https://your-space-name.hf.space" autocomplete="url" spellcheck="false">
               <input id="serverApiKey" type="password" placeholder="Optional API key" autocomplete="off" aria-label="Optional multilingual API key">
               <button id="connectServerButton" class="button button-secondary server-connect-button" type="button">Connect / refresh</button>
-              <small id="serverConnectionStatus" role="status">Not connected. Deploy the backend to a public Hugging Face Docker Space, then paste its URL here.</small>
-              <small>The endpoint is saved in this browser; the API key is used for this session only. Remote voice scripts are sent to this server.</small>
+              <small id="serverConnectionStatus" role="status">Not connected. The local multilingual engine above works without a server.</small>
+              <small>Only scripts using a remote voice are sent to the server you configure here. Browser and on-device voices remain local.</small>
             </div>
 
             <div class="field speed-setting">

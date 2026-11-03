@@ -7,6 +7,10 @@ const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
+const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/+esm";
+const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/wasm";
+const KOKORO_MULTILINGUAL_GPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_gpu_fp16.litertlm";
+const KOKORO_MULTILINGUAL_CPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
@@ -19,6 +23,8 @@ const elements = {
   paragraphCount: document.querySelector("#paragraphCount"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceHelp: document.querySelector("#voiceHelp"),
+  loadMultilingualButton: document.querySelector("#loadMultilingualButton"),
+  multilingualModelStatus: document.querySelector("#multilingualModelStatus"),
   previewVoiceButton: document.querySelector("#previewVoiceButton"),
   voicePreviewAudio: document.querySelector("#voicePreviewAudio"),
   draftStatus: document.querySelector("#draftStatus"),
@@ -50,6 +56,12 @@ const state = {
   jsZipPromise: null,
   lamePromise: null,
   supportedVoiceIds: new Set(),
+  multilingualTts: null,
+  multilingualTtsPromise: null,
+  multilingualVoiceIds: new Set(),
+  multilingualSpeed: null,
+  multilingualLoadSpeed: null,
+  multilingualDelegate: null,
   serverVoiceIds: new Set(),
   serverApiBase: "",
   serverReady: false,
@@ -115,7 +127,8 @@ function restoreDraftLocally() {
 
 function updatePreviewButtonState() {
   const voice = elements.voiceSelect.value;
-  const isAvailable = state.supportedVoiceIds.has(voice) || state.serverVoiceIds.has(voice);
+  const isAvailable = state.supportedVoiceIds.has(voice) ||
+    state.multilingualVoiceIds.has(voice) || state.serverVoiceIds.has(voice);
   elements.previewVoiceButton.disabled = !voice || !isAvailable || state.isGenerating || state.isPreviewing;
 }
 
@@ -207,52 +220,57 @@ async function getJSZip() {
 
 function populateVoiceSelector(tts = null) {
   const previousSelection = elements.voiceSelect.value;
-  const voices = normalizeVoiceCatalog(tts?.voices ?? []);
+  const browserVoices = normalizeVoiceCatalog(tts?.voices ?? []);
   const completeCatalog = getCompleteVoiceCatalog(tts?.voices ?? []);
-  state.supportedVoiceIds = new Set(voices.map((voice) => voice.id));
+  state.supportedVoiceIds = new Set(browserVoices.map((voice) => voice.id));
+
+  const localMultilingualVoices = completeCatalog.filter((voice) =>
+    state.multilingualVoiceIds.has(voice.id) && !state.supportedVoiceIds.has(voice.id)
+  );
   const serverVoices = completeCatalog.filter((voice) =>
-    !state.supportedVoiceIds.has(voice.id) && state.serverVoiceIds.has(voice.id)
+    !state.supportedVoiceIds.has(voice.id) &&
+    !state.multilingualVoiceIds.has(voice.id) &&
+    state.serverVoiceIds.has(voice.id)
   );
   const unavailableVoices = completeCatalog.filter((voice) =>
-    !state.supportedVoiceIds.has(voice.id) && !state.serverVoiceIds.has(voice.id)
+    !state.supportedVoiceIds.has(voice.id) &&
+    !state.multilingualVoiceIds.has(voice.id) &&
+    !state.serverVoiceIds.has(voice.id)
   );
-  const groups = new Map();
-  for (const voice of voices) {
-    if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
-    groups.get(voice.languageLabel).push(voice);
-  }
 
   elements.voiceSelect.replaceChildren();
-  for (const [languageLabel, groupVoices] of groups) {
-    const group = document.createElement("optgroup");
-    group.label = languageLabel + " — browser";
-    for (const voice of groupVoices) {
-      const option = document.createElement("option");
-      option.value = voice.id;
-      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ")";
-      group.append(option);
+
+  const appendGroups = (voices, suffix, labelForVoice = "") => {
+    const groups = new Map();
+    for (const voice of voices) {
+      if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
+      groups.get(voice.languageLabel).push(voice);
     }
-    elements.voiceSelect.append(group);
-  }
-  if (serverVoices.length) {
-    const group = document.createElement("optgroup");
-    group.label = "Multilingual voices — connected server (" + serverVoices.length + ")";
-    for (const voice of serverVoices) {
-      const option = document.createElement("option");
-      option.value = voice.id;
-      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") · server";
-      group.append(option);
+    for (const [languageLabel, groupVoices] of groups) {
+      const group = document.createElement("optgroup");
+      group.label = languageLabel + " — " + suffix;
+      for (const voice of groupVoices) {
+        const option = document.createElement("option");
+        option.value = voice.id;
+        option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ")" + labelForVoice;
+        group.append(option);
+      }
+      elements.voiceSelect.append(group);
     }
-    elements.voiceSelect.append(group);
-  }
+  };
+
+  appendGroups(browserVoices, "browser · WASM");
+  appendGroups(localMultilingualVoices, "on-device · MediaPipe", " · local");
+  appendGroups(serverVoices, "optional server", " · server");
+
   if (unavailableVoices.length) {
     const group = document.createElement("optgroup");
-    group.label = "Multilingual voices — server required (" + unavailableVoices.length + ")";
+    group.label = "Additional voices — load the local model (" + unavailableVoices.length + ")";
     for (const voice of unavailableVoices) {
       const option = document.createElement("option");
       option.value = voice.id;
       option.disabled = true;
-      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") — connect server";
+      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") — load locally";
       group.append(option);
     }
     elements.voiceSelect.append(group);
@@ -261,16 +279,133 @@ function populateVoiceSelector(tts = null) {
   const preserved = [...elements.voiceSelect.options].find((option) =>
     option.value === previousSelection && !option.disabled
   );
-  const preferred = voices.some((voice) => voice.id === "af_heart") ? "af_heart" :
-    (voices[0]?.id || serverVoices[0]?.id || "");
+  const preferred = browserVoices.some((voice) => voice.id === "af_heart") ? "af_heart" :
+    (browserVoices[0]?.id || localMultilingualVoices[0]?.id || serverVoices[0]?.id || "");
   elements.voiceSelect.value = preserved?.value || preferred;
-  elements.voiceSelect.disabled = voices.length + serverVoices.length === 0;
+
+  const availableCount = browserVoices.length + localMultilingualVoices.length + serverVoices.length;
+  elements.voiceSelect.disabled = availableCount === 0;
   elements.voiceHelp.textContent =
-    voices.length + " browser-ready voices · " +
-    (state.serverReady ? serverVoices.length + " multilingual server voices connected" :
-      unavailableVoices.length + " multilingual voices need a server") +
-    (groups.size ? " · " + [...groups.keys()].join(" · ") : "");
+    browserVoices.length + " English browser voices · " +
+    localMultilingualVoices.length + " additional on-device voices · " +
+    unavailableVoices.length + " not loaded" +
+    (serverVoices.length ? " · " + serverVoices.length + " server voices" : "");
   updatePreviewButtonState();
+}
+
+async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
+  const requestedSpeed = Math.min(2, Math.max(0.5, Number(speed) || 1));
+  if (state.multilingualTts && state.multilingualSpeed === requestedSpeed) {
+    return state.multilingualTts;
+  }
+  if (state.multilingualTtsPromise) {
+    if (state.multilingualLoadSpeed === requestedSpeed) return state.multilingualTtsPromise;
+    await state.multilingualTtsPromise.catch(() => {});
+  }
+  if (state.multilingualTts) {
+    try { await state.multilingualTts.close?.(); } catch {}
+    state.multilingualTts = null;
+    state.multilingualVoiceIds = new Set();
+    state.multilingualSpeed = null;
+    state.multilingualDelegate = null;
+  }
+
+  state.multilingualLoadSpeed = requestedSpeed;
+  elements.loadMultilingualButton.disabled = true;
+  elements.loadMultilingualButton.textContent = "Loading local multilingual model…";
+  elements.multilingualModelStatus.textContent =
+    "Preparing MediaPipe and downloading the Kokoro multilingual model (about 295 MB). The browser will cache it when storage permits.";
+  setStatus("Loading the on-device multilingual Kokoro model. No speech server is involved…");
+
+  state.multilingualTtsPromise = (async () => {
+    const module = await import(MEDIAPIPE_CDN);
+    const api = module.default || module;
+    if (!api.FilesetResolver || !api.TextToSpeech) {
+      throw new Error("MediaPipe Tasks Audio did not expose FilesetResolver and TextToSpeech.");
+    }
+    const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM);
+    const hasWebGPU = Boolean(navigator.gpu);
+    let delegate = hasWebGPU ? "GPU" : "CPU";
+    let modelAssetPath = hasWebGPU ? KOKORO_MULTILINGUAL_GPU_MODEL : KOKORO_MULTILINGUAL_CPU_MODEL;
+    let tts;
+    try {
+      tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
+        baseOptions: { modelAssetPath, delegate },
+        defaultVoiceId: "af_heart",
+        speakingRate: requestedSpeed
+      });
+    } catch (gpuError) {
+      if (!hasWebGPU) throw gpuError;
+      elements.multilingualModelStatus.textContent =
+        "GPU initialization was unavailable. Switching to the CPU-compatible local model…";
+      delegate = "CPU";
+      modelAssetPath = KOKORO_MULTILINGUAL_CPU_MODEL;
+      tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
+        baseOptions: { modelAssetPath, delegate },
+        defaultVoiceId: "af_heart",
+        speakingRate: requestedSpeed
+      });
+    }
+
+    const runtimeVoices = await tts.listVoices();
+    const knownIds = new Set(getCompleteVoiceCatalog().map((voice) => voice.id));
+    const ids = (Array.isArray(runtimeVoices) ? runtimeVoices : [])
+      .map((voice) => String(voice?.voiceId || voice?.voice_id || ""))
+      .filter((id) => knownIds.has(id));
+    const requiredMultilingualIds = getCompleteVoiceCatalog()
+      .map((voice) => voice.id)
+      .filter((id) => !/^[ab][fm]_/.test(id));
+    const missing = requiredMultilingualIds.filter((id) => !ids.includes(id));
+    if (missing.length) {
+      try { tts.close?.(); } catch {}
+      throw new Error("The local model loaded, but " + missing.length +
+        " multilingual voice(s) were not registered: " + missing.slice(0, 5).join(", "));
+    }
+
+    state.multilingualTts = tts;
+    state.multilingualVoiceIds = new Set(ids);
+    state.multilingualSpeed = requestedSpeed;
+    state.multilingualDelegate = delegate;
+    state.multilingualLoadSpeed = null;
+    return tts;
+  })().then((tts) => {
+    elements.loadMultilingualButton.textContent = "54 local voices ready";
+    elements.multilingualModelStatus.textContent =
+      "Ready · all 54 Kokoro voices are available on this device. Runtime: " +
+      state.multilingualDelegate + " · speech synthesis and script text stay in this browser.";
+    elements.engineLabel.textContent = "On-device multilingual engine";
+    populateVoiceSelector(state.tts);
+    elements.generateButton.disabled = false;
+    updatePreviewButtonState();
+    return tts;
+  }).catch((error) => {
+    state.multilingualTtsPromise = null;
+    state.multilingualLoadSpeed = null;
+    state.multilingualTts = null;
+    state.multilingualVoiceIds = new Set();
+    state.multilingualSpeed = null;
+    state.multilingualDelegate = null;
+    elements.loadMultilingualButton.disabled = false;
+    elements.loadMultilingualButton.textContent = "Retry multilingual model download";
+    elements.multilingualModelStatus.textContent =
+      "Could not load the local multilingual model: " + (error?.message || String(error));
+    setStatus("Local multilingual model failed to load: " + (error?.message || String(error)), "error");
+    throw error;
+  });
+
+  return state.multilingualTtsPromise;
+}
+
+async function loadMultilingualModel() {
+  try {
+    await getMultilingualTTS(Number(elements.speedInput.value));
+    setStatus("All 54 Kokoro voices are ready. The additional 26 voices run locally without a server.", "good");
+  } catch (error) {
+    console.error(error);
+  } finally {
+    elements.loadMultilingualButton.disabled = false;
+    updatePreviewButtonState();
+  }
 }
 
 function normalizeServerBaseUrl(value) {
@@ -296,7 +431,7 @@ async function connectServer({ silent = false } = {}) {
       localStorage.removeItem("nextgen-kokoro-server-url");
     } catch {}
     if (state.tts || elements.voiceSelect.options.length) populateVoiceSelector(state.tts);
-    elements.generateButton.disabled = !state.tts;
+    elements.generateButton.disabled = !state.tts && !state.multilingualTts;
     return false;
   }
 
@@ -318,7 +453,9 @@ async function connectServer({ silent = false } = {}) {
       .map((voice) => String(voice?.id || ""))
       .filter((id) => knownIds.has(id));
     state.serverVoiceIds = new Set(ids);
-    const multilingualCount = ids.filter((id) => !state.supportedVoiceIds.has(id)).length;
+    const multilingualCount = ids.filter((id) =>
+      !state.supportedVoiceIds.has(id) && !state.multilingualVoiceIds.has(id)
+    ).length;
     if (!multilingualCount) throw new Error("The server did not report any additional multilingual voices.");
     state.serverApiBase = baseUrl;
     state.serverReady = true;
@@ -339,7 +476,7 @@ async function connectServer({ silent = false } = {}) {
     elements.serverConnectionStatus.textContent = "Connection failed: " + (error?.message || String(error));
     elements.engineLabel.textContent = "Local generation";
     if (state.tts || elements.voiceSelect.options.length) populateVoiceSelector(state.tts);
-    elements.generateButton.disabled = !state.tts;
+    elements.generateButton.disabled = !state.tts && !state.multilingualTts;
     if (!silent) setStatus("Could not connect to the multilingual engine: " + (error?.message || String(error)), "error");
     return false;
   } finally {
@@ -365,7 +502,7 @@ async function loadModel() {
     setStatus(
       state.serverReady
         ? "Browser model ready. English voices run locally; multilingual voices run on your connected server."
-        : "Browser model ready. English voices run locally; connect a multilingual server to enable other languages.",
+        : "English voices are ready locally. Load the additional multilingual model below to unlock 26 more voices without a server.",
       "good"
     );
     elements.generateButton.disabled = false;
@@ -467,6 +604,30 @@ async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
   return createWavBlobFromSamples(combined, sampleRate);
 }
 
+async function generateMultilingualSpeechBlob(text, voice, speed, outputFormat, signal) {
+  const tts = await getMultilingualTTS(speed);
+  throwIfAborted(signal);
+  const cancelSynthesis = () => {
+    try { tts.cancel?.(); } catch {}
+  };
+  signal?.addEventListener("abort", cancelSynthesis, { once: true });
+  try {
+    const result = await tts.synthesize(text, { voiceId: voice });
+    throwIfAborted(signal);
+    const samples = result?.samples instanceof Float32Array
+      ? result.samples
+      : Float32Array.from(result?.samples || []);
+    const sampleRate = Number(result?.sampleRateHz || result?.sample_rate_hz || 24000);
+    if (!samples.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+      throw new Error("The local multilingual engine returned an empty or unsupported audio result.");
+    }
+    if (outputFormat === "mp3") return await createMp3BlobFromSamples(samples, sampleRate);
+    return createWavBlobFromSamples(samples, sampleRate);
+  } finally {
+    signal?.removeEventListener("abort", cancelSynthesis);
+  }
+}
+
 async function generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal) {
   if (!state.serverReady || !state.serverApiBase) {
     throw new Error("The multilingual server is not connected. Connect or refresh it, then try again.");
@@ -499,7 +660,11 @@ async function generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal
 
 async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat, signal) {
   throwIfAborted(signal);
-  if (state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice)) {
+  if (state.multilingualVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice)) {
+    return generateMultilingualSpeechBlob(text, voice, speed, outputFormat, signal);
+  }
+  if (state.serverVoiceIds.has(voice) &&
+      !state.supportedVoiceIds.has(voice) && !state.multilingualVoiceIds.has(voice)) {
     return generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal);
   }
   return generateSpeechBlob(tts, text, { voice, speed }, outputFormat, signal);
@@ -517,8 +682,12 @@ async function previewSelectedVoice() {
   elements.previewVoiceButton.textContent = "Generating preview…";
 
   try {
-    const remoteVoice = state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
-    const tts = remoteVoice ? null : (state.tts || await getTTS());
+    const localMultilingualVoice = state.multilingualVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
+    const remoteVoice = state.serverVoiceIds.has(voice) &&
+      !state.supportedVoiceIds.has(voice) && !state.multilingualVoiceIds.has(voice);
+    const tts = localMultilingualVoice
+      ? await getMultilingualTTS(Number(elements.speedInput.value))
+      : remoteVoice ? null : (state.tts || await getTTS());
     const blob = await generateSelectedSpeechBlob(
       tts, PREVIEW_TEXT, voice, Number(elements.speedInput.value), "wav", controller.signal
     );
@@ -654,17 +823,21 @@ async function generateAudio() {
 
   try {
     const voice = elements.voiceSelect.value || "af_heart";
-    const useServer = state.serverReady && state.serverVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
+    const speed = Number(elements.speedInput.value);
+    const useLocalMultilingual = state.multilingualVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
+    const useServer = state.serverReady && state.serverVoiceIds.has(voice) &&
+      !state.supportedVoiceIds.has(voice) && !state.multilingualVoiceIds.has(voice);
     let tts = state.tts;
-    if (!useServer) {
+    if (useLocalMultilingual) {
+      tts = await getMultilingualTTS(speed);
+    } else if (!useServer) {
       tts = tts || await getTTS();
       if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
       setBadge("Model ready", "ready");
       if (!state.supportedVoiceIds.has(voice)) {
-        throw new Error("Voice " + voice + " is not supported by the browser runtime or connected multilingual server.");
+        throw new Error("Voice " + voice + " is not available in a loaded local or connected speech engine.");
       }
     }
-    const speed = Number(elements.speedInput.value);
     if (outputFormat === "mp3") {
       setStatus("Preparing the MP3 encoder…");
       await getLameJS();
@@ -676,7 +849,7 @@ async function generateAudio() {
       const paragraphNumber = index + 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
       setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length +
-        (useServer ? " on the multilingual server…" : "…"));
+        (useLocalMultilingual ? " on this device…" : useServer ? " on the multilingual server…" : "…"));
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       const audioBlob = await generateSelectedSpeechBlob(
@@ -758,10 +931,10 @@ async function generateAudio() {
     state.activeAbortController = null;
     elements.cancelButton.hidden = true;
     elements.cancelButton.disabled = true;
-    elements.generateButton.disabled = !state.tts && !state.serverReady;
+    elements.generateButton.disabled = !state.tts && !state.serverReady && !state.multilingualTts;
     elements.loadButton.disabled = Boolean(state.tts);
     elements.scriptInput.disabled = false;
-    elements.voiceSelect.disabled = !state.tts && !state.serverReady;
+    elements.voiceSelect.disabled = !state.tts && !state.serverReady && !state.multilingualTts;
     elements.speedInput.disabled = false;
     elements.outputFormat.disabled = false;
     updatePreviewButtonState();
@@ -779,6 +952,7 @@ elements.previewVoiceButton.addEventListener("click", previewSelectedVoice);
 elements.cancelButton.addEventListener("click", () => {
   if (!state.activeAbortController) return;
   state.activeAbortController.abort();
+  try { state.multilingualTts?.cancel?.(); } catch {}
   elements.cancelButton.disabled = true;
   setStatus("Stopping after the current speech chunk…");
 });
@@ -790,6 +964,7 @@ elements.speedInput.addEventListener("input", () => {
 });
 
 elements.loadButton.addEventListener("click", loadModel);
+elements.loadMultilingualButton.addEventListener("click", loadMultilingualModel);
 elements.generateButton.addEventListener("click", generateAudio);
 elements.connectServerButton.addEventListener("click", () => void connectServer());
 

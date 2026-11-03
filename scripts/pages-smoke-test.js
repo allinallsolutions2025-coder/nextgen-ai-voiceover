@@ -352,6 +352,47 @@ try {
   report.checks.multilingualServerDisconnectWorks = true;
   await page.locator("#outputFormat").selectOption("wav");
 
+  // Load all remaining Kokoro voices directly in the browser, without a server.
+  await page.locator("#loadMultilingualButton").click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector("#multilingualModelStatus")?.textContent || "";
+    return status.startsWith("Ready · all 54") || status.startsWith("Could not load");
+  }, null, { timeout: 12 * 60 * 1000 });
+  const multilingualStatus = await page.locator("#multilingualModelStatus").innerText();
+  assert(multilingualStatus.startsWith("Ready · all 54"), "Local 54-voice model failed: " + multilingualStatus);
+  report.checks.localMultilingualModelLoaded = true;
+
+  const localVoiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
+    id: option.value, disabled: option.disabled, label: option.textContent.trim()
+  })));
+  const localVoiceIds = localVoiceOptions.filter(option => !option.disabled).map(option => option.id);
+  assert.equal(localVoiceIds.length, 54, "Expected all 54 Kokoro voices to be selectable after local model load.");
+  assert(localVoiceOptions.some(option => option.id === "zf_xiaoyi" && !option.disabled && option.label.includes("local")),
+    "A previously server-only Chinese voice was not enabled locally.");
+  report.localVoiceCount = localVoiceIds.length;
+  report.checks.all54VoicesAvailableWithoutServer = true;
+
+  const multilingualSamples = [
+    { voice: "ef_dora", text: "La síntesis de voz funciona directamente en este dispositivo." },
+    { voice: "ff_siwis", text: "Bonjour, cette voix française fonctionne directement dans votre navigateur." },
+    { voice: "hf_alpha", text: "नमस्ते, यह आवाज़ सीधे आपके डिवाइस पर तैयार होती है।" },
+    { voice: "if_sara", text: "Ciao, questa voce italiana viene generata direttamente sul dispositivo." },
+    { voice: "jf_alpha", text: "こんにちは。この音声はブラウザー内で生成されます。" },
+    { voice: "pf_dora", text: "Olá, esta voz em português funciona diretamente no seu dispositivo." },
+    { voice: "zf_xiaobei", text: "你好，这段语音直接在你的设备上生成。" }
+  ];
+  report.multilingualVoiceTests = [];
+  for (const sample of multilingualSamples) {
+    await page.locator("#voiceSelect").selectOption(sample.voice);
+    await page.locator("#scriptInput").fill(sample.text);
+    await page.locator("#generateButton").click();
+    await waitForGeneration(page);
+    const wav = await inspectAudio(page, "#fullScriptAudio audio");
+    assert(wav.validWav && wav.sizeBytes > 44, sample.voice + " did not produce a valid local WAV.");
+    report.multilingualVoiceTests.push({ voice: sample.voice, wav });
+  }
+  report.checks.nonEnglishLocalSynthesis = true;
+
   // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];
   for (const voice of representativeVoices) {

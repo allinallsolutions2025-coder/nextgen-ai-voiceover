@@ -4,14 +4,15 @@ Browser-first Kokoro text-to-speech studio with an optional multilingual Kokoro 
 
 ## Voice engines
 
-- **Browser engine:** Kokoro.js 1.2.1 with the ONNX q8 model and WASM. It generates the 28 English voices registered by the browser package locally.
-- **Multilingual engine:** an optional FastAPI backend using the Kokoro Python pipeline across nine language codes. It checks each language by generating a sample before publishing any server voices to the studio.
+- **English browser engine:** Kokoro.js 1.2.1 with the ONNX q8 model and WASM. It generates 28 English voices locally.
+- **Full local multilingual engine:** MediaPipe Tasks Audio 1.2.0 with the LiteRT Kokoro-82M bundle. It loads all 54 voices and nine locales directly in the browser, using WebGPU where available and a CPU-compatible model otherwise. No speech server or API key is required.
+- **Optional remote engine:** a FastAPI backend using the Kokoro Python pipeline remains available for advanced deployments, but it is not required for any of the built-in Kokoro voices.
 - Voice choices are enabled only when a connected engine reports them. A voice is not made available just because its ID exists in a static catalogue.
 - The selected voice can be auditioned with a short sample before generating the full script.
 - Script drafts are automatically saved in local browser storage and restored on return. Drafts are not uploaded to GitHub Pages or sent to the speech model unless the user chooses a remote voice.
 - Long generation jobs can be stopped; completed paragraph audio remains available.
 
-The broader Kokoro v1.0 ecosystem documents nine language groups and 54 voice assets. The JavaScript browser package used here registers 28 English voice IDs, so other languages use the Python pipeline and its language-specific text processing. See the [official Kokoro voice catalogue](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) and [Kokoro Python pipeline](https://github.com/hexgrad/kokoro).
+The MediaPipe LiteRT Kokoro bundle contains all 54 Kokoro v1.0 voice embeddings and language-specific text front ends for American/British English, Spanish, French, Hindi, Italian, Japanese, Brazilian Portuguese and Mandarin Chinese. The first multilingual load downloads approximately 295 MB; synthesis runs locally. See the [MediaPipe Text-to-Speech guide](https://ai.google.dev/edge/mediapipe/solutions/audio/text_to_speech) and [Kokoro LiteRT model card](https://huggingface.co/litert-community/Kokoro-82M).
 
 ## Run locally
 
@@ -30,7 +31,7 @@ Serve the project root over localhost:
 python -m http.server 4173
 ```
 
-Open http://localhost:4173 in Chrome or Edge. Browser synthesis runs on the client; remote voices require the optional backend below.
+Open http://localhost:4173 in Chrome or Edge. The 28 English voices run through Kokoro.js. Select **Load 26 additional voices locally** in the voice settings to download the multilingual model and unlock all 54 voices without a server.
 
 ## Deploy the multilingual server
 
@@ -59,6 +60,7 @@ GitHub Pages publishes only `dist/`; backend files, docs and workflow files rema
 ## Current limitations
 
 - No accounts, billing, cloud-synced history or server-side usage enforcement. Script draft autosave is local to the current browser profile.
+- The multilingual LiteRT model needs a first-time download of approximately 295 MB and enough device memory for local inference. WebGPU is preferred where available; CPU fallback may be slower.
 - Browser model/voice assets remain subject to browser cache eviction.
 - The multilingual backend is not live until you create a Space, add `HF_TOKEN` to GitHub Actions secrets, and run the deployment workflow.
 - CPU-only hosting can have cold starts and slower synthesis. The app enables only languages and voices that pass the server's runtime checks.

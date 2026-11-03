@@ -32,6 +32,8 @@ const requiredHtmlMarkers = [
   'id="serverApiUrl"',
   'id="serverApiKey"',
   'id="connectServerButton"',
+  'id="loadMultilingualButton"',
+  'id="multilingualModelStatus"',
   'id="draftStatus"',
   'id="previewVoiceButton"',
   'id="voicePreviewAudio"',
@@ -53,6 +55,17 @@ if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The sp
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
 if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") || !main.includes("nextgen-voiceover-draft-v1")) throw new Error("Local script draft save and recovery are required.");
 if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
+if (!main.includes("@mediapipe/tasks-audio@1.2.0") ||
+    !main.includes("kokoro_int8_gpu_fp16.litertlm") ||
+    !main.includes("kokoro_int8_fp16.litertlm") ||
+    !main.includes("TextToSpeech.createFromOptions") ||
+    !main.includes("tts.listVoices()")) {
+  throw new Error("The full local MediaPipe Kokoro model and 54-voice catalogue are required.");
+}
+if (!main.includes("generateMultilingualSpeechBlob") ||
+    !main.includes("state.multilingualVoiceIds.has(voice)")) {
+  throw new Error("The additional Kokoro voices must synthesize on-device without a server.");
+}
 if (!main.includes("activeAbortController") || !main.includes("Generation stopped.")) throw new Error("Generation cancellation is required.");
 if (!main.includes("await loadModel();") || !main.includes("navigator.storage.persist")) throw new Error("The model must restore automatically and request persistent browser storage.");
 if (!main.includes("normalizeVoiceCatalog(tts?.voices ?? [])")) throw new Error("The app must enable only voices reported by a real runtime.");
