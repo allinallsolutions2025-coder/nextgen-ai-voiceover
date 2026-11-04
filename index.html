@@ -105,6 +105,32 @@
             <div id="audioResults" class="audio-results"></div>
           </section>
 
+          <details class="benchmark-tools" id="voiceBenchmark">
+            <summary>
+              <span><strong>Compare all 28 English voices</strong><small>Generate the same sample with every voice and audition the results side by side</small></span>
+              <span class="details-chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="benchmark-content">
+              <div class="field">
+                <label for="benchmarkPreset">Benchmark script</label>
+                <select id="benchmarkPreset">
+                  <option value="balanced">Balanced narration</option>
+                  <option value="creator">Creator / energetic</option>
+                  <option value="technical">Technical explanation</option>
+                </select>
+              </div>
+              <label class="sr-only" for="benchmarkScript">Voice benchmark text</label>
+              <textarea id="benchmarkScript" class="benchmark-script-input" rows="4" maxlength="1200">Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.</textarea>
+              <p class="benchmark-hint">Each voice uses the same text, speaking pace, and pronunciation rules. This creates 28 local WAV previews and may take several minutes. No audio is uploaded.</p>
+              <div class="benchmark-actions">
+                <button id="runBenchmarkButton" class="button button-secondary" type="button" disabled>Generate 28-voice comparison</button>
+                <button id="stopBenchmarkButton" class="button button-secondary" type="button" hidden disabled>Stop comparison</button>
+              </div>
+              <p id="benchmarkStatus" class="benchmark-status" role="status">Load the model to compare the English voices.</p>
+              <div id="benchmarkResults" class="benchmark-results" aria-live="polite"></div>
+            </div>
+          </details>
+
           <div class="privacy-note"><span aria-hidden="true">◈</span> Your script and pronunciation rules stay in this browser. Speech is generated locally; model files are downloaded to your browser cache.</div>
         </div>
 
@@ -149,6 +175,13 @@
                 <button type="button" data-speed-preset="1.00" aria-pressed="true">Natural</button>
                 <button type="button" data-speed-preset="1.15" aria-pressed="false">Brisk</button>
               </div>
+            </div>
+
+            <div class="field speech-enhancement-field">
+              <label class="toggle-row" for="enhanceSpokenText">
+                <input id="enhanceSpokenText" type="checkbox" checked>
+                <span><strong>Smart spoken-text cleanup</strong><small>Speak dates, currencies, numbers, measurements and common acronyms naturally. Your written script stays unchanged.</small></span>
+              </label>
             </div>
 
             <div class="settings-divider"></div>
