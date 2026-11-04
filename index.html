@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Create natural American and British English voiceovers with 28 Kokoro voices, custom pronunciation rules and local WAV or MP3 exports.">
+  <meta name="description" content="Create natural American and British English voiceovers with 28 Kokoro voices, creator presets, SRT and VTT captions, and local WAV or MP3 project exports.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%237c5cff%27/%3E%3Cpath d=%27M20 18h7l10 17V18h7v28h-7L27 29v17h-7z%27 fill=%27white%27/%3E%3C/svg%3E">
   <title>NextGen AI Voiceover — Voiceover Studio</title>
   <link rel="stylesheet" href="./src/styles.css">
@@ -117,9 +117,21 @@
                 <h2 id="resultsHeading">Your voiceover</h2>
                 <p id="resultsSummary">Your audio files will appear here.</p>
               </div>
-              <a id="zipDownload" class="button button-secondary zip-button" href="#" download="nextgen-voiceover-audio.zip" hidden>Download all WAVs <span aria-hidden="true">↓</span></a>
+              <a id="zipDownload" class="button button-secondary zip-button" href="#" download="nextgen-voiceover-project.zip" hidden>Download project ZIP <span aria-hidden="true">↓</span></a>
             </div>
             <div id="audioResults" class="audio-results"></div>
+            <div id="subtitleDownloads" class="subtitle-downloads" hidden>
+              <div class="subtitle-download-heading">
+                <strong>Caption files</strong>
+                <small>Timed against the finished full-script audio</small>
+              </div>
+              <div class="subtitle-download-links">
+                <a id="srtDownload" class="button button-secondary" href="#" download="full_script.srt">Download SRT</a>
+                <a id="vttDownload" class="button button-secondary" href="#" download="full_script.vtt">Download VTT</a>
+              </div>
+              <p id="subtitleStatus" class="subtitle-status" role="status">Caption timing is being prepared.</p>
+              <p class="subtitle-caveat">Cue timing is estimated from the audio duration and phrase length, not word-level speech alignment. Review the files in your video editor before publishing.</p>
+            </div>
           </section>
 
           <details class="benchmark-tools" id="voiceBenchmark">
@@ -213,8 +225,28 @@
               </select>
               <small>Applies to paragraph files, the full-script file, and the ZIP bundle.</small>
             </div>
+            <div class="creator-export-settings">
+              <div class="field">
+                <label for="creatorPreset">Creator preset</label>
+                <select id="creatorPreset">
+                  <option value="shorts" selected>Shorts / Reels · Vertical 9:16</option>
+                  <option value="longform">Long-form video · 16:9</option>
+                  <option value="podcast">Podcast · 16:9</option>
+                  <option value="narration">Narration · Wide captions</option>
+                </select>
+                <small>Sets the caption layout and project metadata. It does not render or resize video.</small>
+              </div>
+              <label class="toggle-row export-toggle" for="normalizeAudio">
+                <input id="normalizeAudio" type="checkbox">
+                <span><strong>Level audio</strong><small>Approx. −18 dBFS RMS with a −1 dBFS peak ceiling. This is not certified LUFS mastering.</small></span>
+              </label>
+              <label class="toggle-row export-toggle" for="trimSilence">
+                <input id="trimSilence" type="checkbox">
+                <span><strong>Trim edge silence</strong><small>Remove very quiet leading and trailing audio while retaining a short natural buffer.</small></span>
+              </label>
+            </div>
             <div class="output-setting">
-              <div><strong>Generation mode</strong><small>Paragraphs + full script</small></div>
+              <div><strong>Generation mode</strong><small>Paragraphs + full script + creator package</small></div>
               <span class="local-tag"><span></span> Local</span>
             </div>
 
