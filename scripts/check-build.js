@@ -115,8 +115,10 @@ if (!main.includes('id = "fullScriptAudio"') || !main.includes('download.id = "f
 if (html.includes("Performance diagnostics") || html.includes("modelLoadMetric") || html.includes("synthesisMetric")) {
   throw new Error("Performance diagnostics must not be part of the public app UI.");
 }
-if (!main.includes("validateParagraphInput") || !main.includes("tts, scriptForSpeech, voice, speed, outputFormat, controller.signal")) {
-  throw new Error("Paragraph generation and full-script streaming are required.");
+if (!main.includes("validateParagraphInput") ||
+    !main.includes("generateSelectedSpeechBlob(tts, speechText, selectedVoice, speed, outputFormat, controller.signal)") ||
+    !main.includes("renderSpeech(scriptForSpeech)")) {
+  throw new Error("Paragraph generation and full-script synthesis are required for both local engines.");
 }
 if (!main.includes("tts.stream(") || !main.includes("createWavBlobFromSamples")) {
   throw new Error("Long narration must use streamed audio chunks joined into one WAV.");

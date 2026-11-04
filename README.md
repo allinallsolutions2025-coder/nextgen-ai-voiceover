@@ -4,15 +4,17 @@ Browser-first Kokoro text-to-speech studio with an optional multilingual Kokoro 
 
 ## Voice engines
 
-- **English browser engine:** Kokoro.js 1.2.1 with the ONNX q8 model and WASM. It generates 28 English voices locally.
-- **Full local multilingual engine:** MediaPipe Tasks Audio 1.2.0 with the LiteRT Kokoro-82M CPU-compatible bundle and the stable published MediaPipe browser bundle. It is intended to load all 54 voices and nine locales directly in the browser without a speech server or API key; the live browser test is being used to verify the runtime before enabling those voices.
-- **Optional remote engine:** a FastAPI backend using the Kokoro Python pipeline remains available for advanced deployments, but it is not required for any of the built-in Kokoro voices.
-- Voice choices are enabled only when a connected engine reports them. A voice is not made available just because its ID exists in a static catalogue.
-- The selected voice can be auditioned with a short sample before generating the full script.
-- Script drafts are automatically saved in local browser storage and restored on return. Drafts are not uploaded to GitHub Pages or sent to the speech model unless the user chooses a remote voice.
-- Long generation jobs can be stopped; completed paragraph audio remains available.
+**Kokoro (English):** Kokoro.js 1.2.1 with the ONNX q8 model and WASM runs locally in the browser. The product now lists only 28 American and British English voices. The 26 non-English Kokoro entries have been removed from the product catalogue and selector.
 
-The MediaPipe LiteRT Kokoro bundle contains all 54 Kokoro v1.0 voice embeddings and language-specific text front ends for American/British English, Spanish, French, Hindi, Italian, Japanese, Brazilian Portuguese and Mandarin Chinese. The first multilingual load downloads approximately 295 MB; synthesis runs locally. See the [MediaPipe Text-to-Speech guide](https://ai.google.dev/edge/mediapipe/solutions/audio/text_to_speech) and [Kokoro LiteRT model card](https://huggingface.co/litert-community/Kokoro-82M).
+**Supertonic 3 (multilingual):** A separate ONNX Runtime Web engine runs locally on the device. It supports 31 languages plus a language-agnostic mode, and ten preset styles (M1–M5 and F1–F5). It does not add Kokoro IDs, use Kokoro voices, or offer voice cloning.
+
+The Supertonic 3 ONNX weights total approximately 398 MB. They are fetched from the pinned [Supertonic 3 model revision](https://huggingface.co/supertone-oss-archive/supertonic-3/tree/aafc6e32416a594460b32413efc49d7fe4ce6d46) the first time the user loads that engine. Speech inference runs in the browser through ONNX Runtime Web WASM; there is no speech server or API key.
+
+Supertonic supports Hindi, but not Tamil, Telugu, Kannada or Malayalam. Its preset voice styles are not custom voice cloning.
+
+**Licensing:** the adapted Supertonic browser helper is MIT-licensed ([notice](./LICENSES/SUPERTONIC-WEB-CODE-MIT.txt)). The model weights use OpenRAIL-M ([license copy](./LICENSES/SUPERTONIC-3-OPENRAIL-M.txt)); the app asks the user to acknowledge those restrictions before downloading the model. Review the model license before using or distributing generated audio. The upstream open-source repository is archived, so future upstream maintenance is not expected.
+
+The two engines remain separate in the UI: Kokoro's menu never displays the removed non-English Kokoro entries as Supertonic voices.
 
 ## Run locally
 
@@ -31,40 +33,29 @@ Serve the project root over localhost:
 python -m http.server 4173
 ```
 
-Open http://localhost:4173 in Chrome or Edge. The 28 English voices run through Kokoro.js. Select **Load 26 additional voices locally** in the voice settings to download the multilingual model and unlock all 54 voices without a server.
+Open http://localhost:4173 in Chrome or Edge. Kokoro loads its 28 English voices. Select **Supertonic 3 · 31 languages**, acknowledge the model license, and load its ONNX weights for separate multilingual speech on this device.
 
-## Deploy the multilingual server
+## Legacy server source
 
-The backend source is in `backend/` and is packaged as a Docker Hugging Face Space.
-
-1. Create a **public Docker Space** in your Hugging Face account.
-2. In this GitHub repository, add an Actions secret named `HF_TOKEN` with write access to that Space.
-3. Run **Actions → Deploy multilingual Kokoro backend** and enter the Space repository as `username/space-name`.
-4. Wait for the image build, model download and per-language startup synthesis checks to complete.
-5. Paste its public `https://username-space-name.hf.space` URL into the studio's **Multilingual engine** field and select **Connect / refresh**.
-6. Optionally set the Space secret `NEXTGEN_API_KEY`; enter that same key in the studio.
-
-The deploy workflow does not create a Hugging Face Space or issue an access token. A private Space is not directly callable by this public browser app without an authenticated proxy. Never paste your Hugging Face account token into the website.
-
-See [multilingual backend deployment notes](docs/MULTILINGUAL-BACKEND.md) and the [backend README](backend/README.md).
+The former Kokoro multilingual FastAPI backend is retained under `backend/` as legacy source code, but it is no longer connected to the website. The published app has no server URL field, server-side voice selector, or remote Kokoro generation path. The local Supertonic engine is the multilingual path in this build.
 
 ## GitHub Actions
 
 - **CI** runs frontend checks, unit tests, backend Python syntax/catalogue tests and a static-site build.
 - **Deploy preview to GitHub Pages** publishes the static web client.
-- **Test live GitHub Pages app** runs a Playwright smoke test, including local speech generation and a mocked multilingual API connection/synthesis path.
-- **Deploy multilingual Kokoro backend** copies `backend/` into an existing Hugging Face Space after manual workflow dispatch.
+- **Test live GitHub Pages app** runs a Playwright smoke test, including real local Supertonic Hindi and Spanish synthesis.
+- A legacy backend deploy workflow and source remain in the repository, but are not used by the published client.
 
 GitHub Pages publishes only `dist/`; backend files, docs and workflow files remain in the repository.
 
 ## Current limitations
 
 - No accounts, billing, cloud-synced history or server-side usage enforcement. Script draft autosave is local to the current browser profile.
-- The multilingual LiteRT model needs a first-time download of approximately 295 MB and enough device memory for local CPU inference.
+- Supertonic's ONNX weights require a first-time download of about 398 MB and enough device memory for browser-based inference.
 - Browser model/voice assets remain subject to browser cache eviction.
-- The multilingual backend is not live until you create a Space, add `HF_TOKEN` to GitHub Actions secrets, and run the deployment workflow.
-- CPU-only hosting can have cold starts and slower synthesis. The app enables only languages and voices that pass the server's runtime checks.
-- When a server voice is selected, the script text is sent to the configured API endpoint. Browser voices remain local to your device.
+- Supertonic runs with ONNX Runtime Web WASM in this build; large models may be slow or fail on devices with limited available memory.
+- The 26 non-English Kokoro voice IDs are intentionally absent from the published voice catalogue and cannot be selected from the product UI.
+- Supertonic 3 does not support Tamil, Telugu, Kannada or Malayalam.
 - This is a prototype, not a production SaaS. Do not commit API keys, Hugging Face tokens, private scripts or generated user audio.
 
 
