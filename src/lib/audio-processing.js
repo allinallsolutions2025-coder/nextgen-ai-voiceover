@@ -53,9 +53,11 @@ export function processAudioSamples(input, sampleRate, options = {}) {
     }
   }
 
-  const samples = new Float32Array(source.length);
-  if (gain === 1) samples.set(source);
-  else {
+  // Reuse the source view when no gain change is needed. This avoids a
+  // second full-size allocation for long scripts when both effects are off.
+  let samples = source;
+  if (gain !== 1) {
+    samples = new Float32Array(source.length);
     for (let index = 0; index < source.length; index += 1) {
       samples[index] = Math.max(-1, Math.min(1, source[index] * gain));
     }
