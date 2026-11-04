@@ -3,6 +3,9 @@ import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
 import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 import { prepareNarrationText, splitNarrationSections } from "./lib/narration.js";
+import { processAudioSamples } from "./lib/audio-processing.js";
+import { getAudioDurationSeconds } from "./lib/audio-metadata.js";
+import { buildSubtitleCues, getCreatorPreset, serializeSrt, serializeVtt } from "./lib/subtitles.js";
 import {
   mergeParagraphWithNext, moveParagraph, reconcileParagraphs,
   serializeParagraphs, splitParagraph
@@ -18,6 +21,7 @@ const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
 const FAVORITES_STORAGE_KEY = "nextgen-voiceover-favorite-voices-v1";
 const RECENT_VOICES_STORAGE_KEY = "nextgen-voiceover-recent-voices-v1";
 const PARAGRAPH_SETTINGS_STORAGE_KEY = "nextgen-voiceover-paragraph-settings-v1";
+const CREATOR_EXPORT_SETTINGS_KEY = "nextgen-voiceover-creator-export-v1";
 const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 
 const elements = {
@@ -47,6 +51,9 @@ const elements = {
   spokenPreviewText: document.querySelector("#spokenPreviewText"),
   draftStatus: document.querySelector("#draftStatus"),
   outputFormat: document.querySelector("#outputFormat"),
+  creatorPreset: document.querySelector("#creatorPreset"),
+  normalizeAudio: document.querySelector("#normalizeAudio"),
+  trimSilence: document.querySelector("#trimSilence"),
   speedInput: document.querySelector("#speedInput"),
   speedValue: document.querySelector("#speedValue"),
   loadButton: document.querySelector("#loadButton"),
@@ -60,6 +67,10 @@ const elements = {
   resultsSummary: document.querySelector("#resultsSummary"),
   audioResults: document.querySelector("#audioResults"),
   zipDownload: document.querySelector("#zipDownload"),
+  subtitleDownloads: document.querySelector("#subtitleDownloads"),
+  srtDownload: document.querySelector("#srtDownload"),
+  vttDownload: document.querySelector("#vttDownload"),
+  subtitleStatus: document.querySelector("#subtitleStatus"),
 };
 
 const state = {
@@ -85,7 +96,10 @@ const state = {
   generatedParagraphBlobs: [],
   fullScriptBlob: null,
   zipObjectUrl: null,
-  outputExtension: "wav"
+  outputExtension: "wav",
+  projectExport: null,
+  subtitleSrtBlob: null,
+  subtitleVttBlob: null
 };
 
 function setStatus(message, kind = "normal") {
@@ -161,6 +175,39 @@ function restoreParagraphSettings() {
   } catch {
     state.paragraphs = reconcileParagraphs(elements.scriptInput.value, []);
   }
+}
+
+function persistCreatorExportSettings() {
+  try {
+    localStorage.setItem(CREATOR_EXPORT_SETTINGS_KEY, JSON.stringify({
+      preset: elements.creatorPreset.value,
+      normalize: elements.normalizeAudio.checked,
+      trimSilence: elements.trimSilence.checked
+    }));
+  } catch {
+    // These settings still apply for the current tab when storage is unavailable.
+  }
+}
+
+function restoreCreatorExportSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CREATOR_EXPORT_SETTINGS_KEY) || "{}");
+    if (["shorts", "longform", "podcast", "narration"].includes(saved.preset)) {
+      elements.creatorPreset.value = saved.preset;
+    }
+    if (typeof saved.normalize === "boolean") elements.normalizeAudio.checked = saved.normalize;
+    if (typeof saved.trimSilence === "boolean") elements.trimSilence.checked = saved.trimSilence;
+  } catch {
+    elements.creatorPreset.value = "shorts";
+    elements.normalizeAudio.checked = false;
+    elements.trimSilence.checked = false;
+  }
+}
+
+function setCreatorExportControlsDisabled(disabled) {
+  elements.creatorPreset.disabled = disabled;
+  elements.normalizeAudio.disabled = disabled;
+  elements.trimSilence.disabled = disabled;
 }
 
 function syncParagraphsFromScript() {
@@ -474,6 +521,12 @@ function clearResults() {
   state.generatedParagraphBlobs = [];
   state.fullScriptBlob = null;
   state.zipObjectUrl = null;
+  state.projectExport = null;
+  state.subtitleSrtBlob = null;
+  state.subtitleVttBlob = null;
+  elements.subtitleDownloads.hidden = true;
+  elements.srtDownload.removeAttribute("href");
+  elements.vttDownload.removeAttribute("href");
   elements.audioResults.replaceChildren();
   elements.zipDownload.hidden = true;
   elements.zipDownload.removeAttribute("href");
@@ -820,8 +873,12 @@ async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
     combined.set(chunk.samples, offset);
     offset += chunk.samples.length;
   }
-  if (outputFormat === "mp3") return createMp3BlobFromSamples(combined, sampleRate);
-  return createWavBlobFromSamples(combined, sampleRate);
+  const processedAudio = processAudioSamples(combined, sampleRate, {
+    normalize: elements.normalizeAudio.checked,
+    trimSilence: elements.trimSilence.checked
+  });
+  if (outputFormat === "mp3") return createMp3BlobFromSamples(processedAudio.samples, sampleRate);
+  return createWavBlobFromSamples(processedAudio.samples, sampleRate);
 }
 
 
@@ -977,6 +1034,33 @@ function updateParagraphAudioResult(index, blob, voice, speed, outputFormat) {
   }
 }
 
+async function createSubtitleExports() {
+  if (!state.fullScriptBlob || !state.projectExport?.spokenScript) return;
+  const durationSeconds = await getAudioDurationSeconds(state.fullScriptBlob);
+  const preset = getCreatorPreset(state.projectExport.presetId);
+  const cues = buildSubtitleCues(state.projectExport.spokenScript, durationSeconds, { preset: preset.id });
+  const srtText = serializeSrt(cues);
+  const vttText = serializeVtt(cues);
+  state.subtitleSrtBlob = new Blob([srtText], { type: "application/x-subrip;charset=utf-8" });
+  state.subtitleVttBlob = new Blob([vttText], { type: "text/vtt;charset=utf-8" });
+  state.projectExport.audioDurationSeconds = durationSeconds;
+  state.projectExport.subtitleCueCount = cues.length;
+  state.projectExport.subtitleTiming = "Estimated from measured full-audio duration, weighted by phrase length and punctuation. Review and adjust before publishing; this is not word-level forced alignment.";
+
+  for (const [element, blob, filename] of [
+    [elements.srtDownload, state.subtitleSrtBlob, "full_script.srt"],
+    [elements.vttDownload, state.subtitleVttBlob, "full_script.vtt"]
+  ]) {
+    const url = URL.createObjectURL(blob);
+    state.objectUrls.push(url);
+    element.href = url;
+    element.download = filename;
+  }
+  elements.subtitleStatus.textContent = preset.label + " captions · " + durationSeconds.toFixed(1) +
+    " seconds · " + cues.length + " estimated cues. Review timing before publishing.";
+  elements.subtitleDownloads.hidden = false;
+}
+
 async function refreshZipDownload() {
   if (!state.fullScriptBlob || !state.generatedParagraphBlobs.length) return;
   const JSZip = await getJSZip();
@@ -986,6 +1070,32 @@ async function refreshZipDownload() {
     zip.file("paragraph_" + String(index + 1).padStart(3, "0") + "." + extension, state.generatedParagraphBlobs[index]);
   }
   zip.file("full_script." + extension, state.fullScriptBlob);
+  if (state.projectExport) {
+    zip.file("original_script.txt", state.projectExport.originalScript || "");
+    zip.file("spoken_script.txt", state.projectExport.spokenScript || "");
+    if (state.subtitleSrtBlob) zip.file("full_script.srt", state.subtitleSrtBlob);
+    if (state.subtitleVttBlob) zip.file("full_script.vtt", state.subtitleVttBlob);
+    const manifest = {
+      name: "NextGen AI Voiceover creator project",
+      createdAt: state.projectExport.createdAt,
+      outputFormat: state.projectExport.outputFormat,
+      voice: state.projectExport.voice,
+      speed: state.projectExport.speed,
+      creatorPreset: getCreatorPreset(state.projectExport.presetId),
+      audioProcessing: state.projectExport.audioProcessing,
+      audioDurationSeconds: state.projectExport.audioDurationSeconds || null,
+      subtitleCueCount: state.projectExport.subtitleCueCount || 0,
+      subtitleTiming: state.projectExport.subtitleTiming || "Not generated",
+      notes: [
+        "Speech is generated locally with Kokoro English voices.",
+        "Subtitle timing is estimated from the measured full-audio duration and phrase weights; it is not phoneme- or word-level forced alignment.",
+        "Check subtitle timing and line breaks in your video editor before publishing.",
+        "Audio level matching targets approximately -18 dBFS RMS with a -1 dBFS peak ceiling; it is not an EBU R128 LUFS compliance measurement."
+      ]
+    };
+    zip.file("project.json", JSON.stringify(manifest, null, 2));
+    zip.file("README.txt", "NextGen AI Voiceover project export\n\nContains the full-script audio, paragraph audio files, original_script.txt, spoken_script.txt, project.json and any generated full_script.srt / full_script.vtt captions.\n\nSubtitle cue times are estimates based on the measured audio runtime and phrase length. Review and adjust them before publishing. Audio level matching is an RMS-based browser process, not certified LUFS mastering.\n");
+  }
   const zipBlob = await zip.generateAsync({
     type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
   });
@@ -997,6 +1107,8 @@ async function refreshZipDownload() {
   state.zipObjectUrl = zipUrl;
   state.objectUrls.push(zipUrl);
   elements.zipDownload.href = zipUrl;
+  elements.zipDownload.download = "nextgen-voiceover-project.zip";
+  elements.zipDownload.textContent = "Download project ZIP ↓";
   elements.zipDownload.hidden = false;
 }
 
@@ -1031,6 +1143,7 @@ async function regenerateParagraph(index) {
   elements.pronunciationRules.disabled = true;
   elements.speedInput.disabled = true;
   elements.outputFormat.disabled = true;
+  setCreatorExportControlsDisabled(true);
   setParagraphEditorBusy(true);
   setProgress(15);
   setStatus("Regenerating paragraph " + (index + 1) + " locally with " + voice + " at " + speed.toFixed(2) + "×…");
@@ -1072,6 +1185,7 @@ async function regenerateParagraph(index) {
     elements.pronunciationRules.disabled = false;
     elements.speedInput.disabled = false;
     elements.outputFormat.disabled = false;
+    setCreatorExportControlsDisabled(false);
     elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
     elements.loadButton.disabled = Boolean(state.tts);
     setParagraphEditorBusy(false);
@@ -1265,6 +1379,7 @@ async function generateAudio() {
   elements.speedInput.disabled = true;
   for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
   elements.outputFormat.disabled = true;
+  setCreatorExportControlsDisabled(true);
   elements.runBenchmarkButton.disabled = true;
   renderParagraphEditor();
   setParagraphEditorBusy(true);
@@ -1288,6 +1403,7 @@ async function generateAudio() {
       setStatus("Preparing the MP3 encoder…");
       await getLameJS();
     }
+    const spokenScriptForExport = transformTextForSpeech(scriptForSpeech, pronunciation.rules);
     const renderSpeech = (speechText) => generateSelectedSpeechBlob(
       tts, transformTextForSpeech(speechText, pronunciation.rules),
       selectedVoice, speed, outputFormat, controller.signal
@@ -1340,6 +1456,20 @@ async function generateAudio() {
     }
     const engineSubtitle = "Kokoro English · " + selectedVoice;
     state.fullScriptBlob = fullScriptBlob;
+    state.projectExport = {
+      originalScript: scriptForSpeech,
+      spokenScript: spokenScriptForExport,
+      presetId: elements.creatorPreset.value,
+      voice: selectedVoice,
+      speed,
+      outputFormat,
+      audioProcessing: {
+        normalize: elements.normalizeAudio.checked,
+        trimSilence: elements.trimSilence.checked,
+        normalizationMethod: "RMS target -18 dBFS, peak-limited to -1 dBFS"
+      },
+      createdAt: new Date().toISOString()
+    };
     addAudioResult({
       title: "Full script voiceover",
       subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) +
@@ -1347,16 +1477,28 @@ async function generateAudio() {
       filename: "full_script." + extension, blob: fullScriptBlob, kind: "full", outputFormat
     });
 
-    setStatus("Packaging the full-script and paragraph " + formatLabel(outputFormat) + " files…");
+    setStatus("Preparing estimated SRT and VTT captions from the finished audio…");
+    try {
+      await createSubtitleExports();
+    } catch (subtitleError) {
+      console.warn("Subtitle export could not be prepared.", subtitleError);
+      state.projectExport.subtitleTiming = "Subtitle timing could not be measured in this browser.";
+      elements.subtitleStatus.textContent = "Audio is ready, but caption timing could not be measured: " +
+        (subtitleError?.message || String(subtitleError));
+      elements.subtitleDownloads.hidden = true;
+    }
+    setStatus("Packaging audio, captions and script files into the creator project ZIP…");
     setProgress(96);
     await refreshZipDownload();
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
       "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
-      formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×";
+      formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×" +
+      (state.subtitleSrtBlob && state.subtitleVttBlob ? " · SRT + VTT captions ready" : "");
     setProgress(100);
-    setStatus("English voiceover complete. Preview or download the full script, individual paragraphs, or the complete " +
-      formatLabel(outputFormat) + " bundle.", "good");
+    setStatus("English voiceover complete. Preview the audio, " +
+      (state.subtitleSrtBlob && state.subtitleVttBlob ? "download SRT/VTT captions, " : "") +
+      "or export the complete creator project ZIP.", "good");
   } catch (error) {
     if (controller.signal.aborted || error?.name === "AbortError") {
       setStatus("Generation stopped. Completed paragraph audio remains available below.", "normal");
@@ -1379,6 +1521,7 @@ async function generateAudio() {
     elements.speedInput.disabled = false;
     for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = false;
     elements.outputFormat.disabled = false;
+    setCreatorExportControlsDisabled(false);
     elements.loadButton.disabled = Boolean(state.tts);
     elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
     setParagraphEditorBusy(false);
@@ -1441,6 +1584,18 @@ elements.cancelButton.addEventListener("click", () => {
 });
 
 elements.outputFormat.addEventListener("change", () => clearResults());
+elements.creatorPreset.addEventListener("change", () => {
+  persistCreatorExportSettings();
+  clearResults();
+});
+elements.normalizeAudio.addEventListener("change", () => {
+  persistCreatorExportSettings();
+  clearResults();
+});
+elements.trimSilence.addEventListener("change", () => {
+  persistCreatorExportSettings();
+  clearResults();
+});
 
 elements.speedInput.addEventListener("input", () => setSpeed(elements.speedInput.value));
 for (const button of document.querySelectorAll("[data-speed-preset]")) {
@@ -1467,6 +1622,7 @@ restorePronunciationRules();
 restoreSpokenTextPreference();
 restoreVoicePreferences();
 restoreParagraphSettings();
+restoreCreatorExportSettings();
 updateScriptCounts();
 renderParagraphEditor();
 updateSpokenTextPreview();

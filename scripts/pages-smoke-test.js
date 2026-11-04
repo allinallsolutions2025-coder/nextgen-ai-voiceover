@@ -184,6 +184,20 @@ try {
   report.checks.only28EnglishKokoroVoicesVisible = true;
   report.checks.nonEnglishKokoroRemoved = true;
   assert.equal(await page.locator("#outputFormat option").count(), 2, "Expected WAV and MP3 output choices.");
+  report.checks.creatorExportControlsPresent =
+    await page.locator("#creatorPreset, #normalizeAudio, #trimSilence, #srtDownload, #vttDownload").count() === 5;
+  assert.equal(report.checks.creatorExportControlsPresent, true, "Creator export controls are missing.");
+  assert.equal(await page.locator("#creatorPreset option").count(), 4, "Expected four creator caption presets.");
+  await page.locator("#creatorPreset").selectOption("shorts");
+  await page.locator("#normalizeAudio").check();
+  await page.locator("#trimSilence").check();
+  const savedCreatorSettings = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("nextgen-voiceover-creator-export-v1") || "{}")
+  );
+  assert.equal(savedCreatorSettings.preset, "shorts");
+  assert.equal(savedCreatorSettings.normalize, true);
+  assert.equal(savedCreatorSettings.trimSilence, true);
+  report.checks.creatorSettingsSavedLocally = true;
 
   temporaryDirectory = await mkdtemp(join(tmpdir(), "nextgen-pages-test-"));
 
@@ -250,6 +264,13 @@ try {
   assert.equal(await page.locator(".paragraph-editor-speed").nth(0).inputValue(), "1.15",
     "Paragraph pace override was not restored after reload.");
   report.checks.paragraphOverridesRestored = true;
+  assert.equal(await page.locator("#creatorPreset").inputValue(), "shorts",
+    "Creator preset was not restored after reload.");
+  assert.equal(await page.locator("#normalizeAudio").isChecked(), true,
+    "Audio level matching preference was not restored after reload.");
+  assert.equal(await page.locator("#trimSilence").isChecked(), true,
+    "Edge-silence trimming preference was not restored after reload.");
+  report.checks.creatorSettingsRestored = true;
   await page.locator("#voiceSelect").selectOption("am_adam");
   assert.equal(await page.locator("#favoriteVoiceButton").getAttribute("aria-pressed"), "true",
     "Favourite voice was not restored after reload.");
@@ -311,6 +332,33 @@ try {
   report.checks.paragraphWavOutputs = true;
   report.checks.fullScriptWavOutput = true;
 
+  assert.equal(await page.locator("#subtitleDownloads").isVisible(), true,
+    "SRT and VTT download links were not shown after generation.");
+  const subtitleFiles = await page.evaluate(async () => {
+    const srtAnchor = document.querySelector("#srtDownload");
+    const vttAnchor = document.querySelector("#vttDownload");
+    const [srt, vtt] = await Promise.all([
+      fetch(srtAnchor.href).then(response => response.text()),
+      fetch(vttAnchor.href).then(response => response.text())
+    ]);
+    return { srt, vtt, srtName:srtAnchor.download, vttName:vttAnchor.download };
+  });
+  assert.match(subtitleFiles.srt, /^1\n\d{2}:\d{2}:\d{2},\d{3} --> /,
+    "SRT output does not contain numbered cues and SRT timestamps.");
+  assert.match(subtitleFiles.vtt, /^WEBVTT\n\n\d{2}:\d{2}:\d{2}\.\d{3} --> /,
+    "VTT output does not contain the WEBVTT header and VTT timestamps.");
+  assert.equal(subtitleFiles.srtName, "full_script.srt");
+  assert.equal(subtitleFiles.vttName, "full_script.vtt");
+  assert.match(await page.locator("#subtitleStatus").innerText(), /estimated cues/);
+  report.subtitleFiles = {
+    srtBytes: subtitleFiles.srt.length,
+    vttBytes: subtitleFiles.vtt.length,
+    sample: subtitleFiles.srt.slice(0, 180)
+  };
+  report.checks.srtExport = true;
+  report.checks.vttExport = true;
+  report.checks.captionTimingNoteVisible = true;
+
   const zipHrefBeforeRegeneration = await page.locator("#zipDownload").getAttribute("href");
   await page.locator(".paragraph-action-regenerate").first().click();
   await page.waitForFunction(() =>
@@ -331,16 +379,26 @@ try {
     const blob = await response.blob();
     const bytes = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
     const signature = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+    const archiveText = new TextDecoder().decode(await blob.arrayBuffer());
+    const requiredFiles = [
+      "paragraph_001.wav", "paragraph_002.wav", "full_script.wav",
+      "full_script.srt", "full_script.vtt", "original_script.txt",
+      "spoken_script.txt", "project.json", "README.txt"
+    ];
     return {
       status: response.status, sizeBytes: blob.size, signature,
-      validZip: signature === "504b0304" || signature === "504b0506" || signature === "504b0708"
+      validZip: signature === "504b0304" || signature === "504b0506" || signature === "504b0708",
+      requiredFiles,
+      missingProjectFiles: requiredFiles.filter(name => !archiveText.includes(name))
     };
   });
   report.zip = zipCheck;
   assert.equal(zipCheck.status, 200, "Generated ZIP blob could not be read.");
   assert(zipCheck.sizeBytes > 22, "Generated ZIP is unexpectedly empty.");
   assert.equal(zipCheck.validZip, true, "Generated ZIP signature is invalid.");
+  assert.deepEqual(zipCheck.missingProjectFiles, [], "Creator ZIP is missing one or more expected project assets.");
   report.checks.zipValid = true;
+  report.checks.creatorProjectZipContents = true;
 
   const [zipDownload] = await Promise.all([page.waitForEvent("download"), page.locator("#zipDownload").click()]);
   const zipPath = join(temporaryDirectory, zipDownload.suggestedFilename());

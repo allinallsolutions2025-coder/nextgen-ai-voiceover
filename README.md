@@ -19,7 +19,10 @@ The app restores the model automatically and enables browser caching. The first 
 - **Paragraph editor:** edit each section independently, reorder sections, split at the text cursor, merge with the next section, and set an optional English voice and speaking pace override.
 - **Section regeneration:** regenerate one paragraph without rerendering the other section files. Its audio file and ZIP bundle are refreshed. Per-paragraph overrides apply to section files; the continuous full-script file uses the studio-wide voice and pace.
 - **Script workflow:** up to 20,000 characters and 100 paragraphs, with each paragraph rendered separately plus one continuous full-script voiceover.
-- **Exports:** WAV or MP3, individual paragraph files, full-script audio and one ZIP bundle.
+- **Creator export presets:** Shorts / Reels (9:16), long-form video (16:9), podcast and narration profiles configure caption line lengths and project metadata; they do not render video.
+- **Subtitles:** download SRT and VTT files for the continuous full-script audio. Cue timing is estimated from the measured audio duration and phrase length, so review it before publishing.
+- **Audio finishing:** optionally level-match toward −18 dBFS RMS with a −1 dBFS peak ceiling and trim quiet leading/trailing silence with a short buffer. This is not certified LUFS mastering.
+- **Project ZIP:** paragraph and full-script WAV or MP3 audio, SRT/VTT captions, original script, prepared spoken script and a project.json manifest.
 - **Draft recovery:** the script and pronunciation rules are saved locally in the current browser profile.
 
 The engine exposes voice selection and speaking speed; it does not currently provide voice cloning, SSML markup, separate pitch controls or emotion sliders. Punctuation and the custom pronunciation guide are the available ways to tune spoken text.
