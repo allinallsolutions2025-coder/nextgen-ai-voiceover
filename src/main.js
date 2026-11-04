@@ -941,6 +941,126 @@ function addAudioResult({ title, subtitle, filename, blob, kind, index, outputFo
   else elements.audioResults.append(card);
 }
 
+function updateParagraphAudioResult(index, blob, voice, speed, outputFormat) {
+  const paragraphNumber = index + 1;
+  const card = elements.audioResults.querySelector(
+    '.paragraph-audio-card[data-paragraph-index="' + paragraphNumber + '"]'
+  );
+  if (!card) throw new Error("The paragraph audio card is missing. Generate the script again.");
+
+  const url = URL.createObjectURL(blob);
+  state.objectUrls.push(url);
+  const player = card.querySelector("audio");
+  const download = card.querySelector(".audio-download");
+  const subtitle = card.querySelector(".audio-card-subtitle");
+  player.src = url;
+  download.href = url;
+  download.download = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + outputFormat;
+  if (subtitle) {
+    const excerpt = state.paragraphs[index].text.slice(0, 110);
+    subtitle.textContent = excerpt + (state.paragraphs[index].text.length > 110 ? "…" : "") +
+      " · " + voice + " · " + speed.toFixed(2) + "×";
+  }
+}
+
+async function refreshZipDownload() {
+  if (!state.fullScriptBlob || !state.generatedParagraphBlobs.length) return;
+  const JSZip = await getJSZip();
+  const zip = new JSZip();
+  const extension = state.outputExtension;
+  for (let index = 0; index < state.generatedParagraphBlobs.length; index += 1) {
+    zip.file("paragraph_" + String(index + 1).padStart(3, "0") + "." + extension, state.generatedParagraphBlobs[index]);
+  }
+  zip.file("full_script." + extension, state.fullScriptBlob);
+  const zipBlob = await zip.generateAsync({
+    type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
+  });
+  const zipUrl = URL.createObjectURL(zipBlob);
+  state.objectUrls.push(zipUrl);
+  elements.zipDownload.href = zipUrl;
+  elements.zipDownload.hidden = false;
+}
+
+async function regenerateParagraph(index) {
+  if (state.isGenerating || state.isPreviewing || state.isBenchmarking) return;
+  const paragraph = state.paragraphs[index];
+  if (!paragraph || !state.generatedParagraphBlobs[index] || !state.fullScriptBlob) return;
+
+  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
+  if (pronunciation.errors.length) {
+    setStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before regenerating.", "error");
+    updatePronunciationStatus();
+    return;
+  }
+
+  const voice = paragraph.voice || elements.voiceSelect.value || "af_heart";
+  const speed = Number(paragraph.speed || elements.speedInput.value);
+  if (!state.supportedVoiceIds.has(voice)) {
+    setStatus("Choose a valid English voice for paragraph " + (index + 1) + ".", "error");
+    return;
+  }
+
+  const controller = new AbortController();
+  state.activeAbortController = controller;
+  state.isGenerating = true;
+  elements.cancelButton.hidden = false;
+  elements.cancelButton.disabled = false;
+  elements.generateButton.disabled = true;
+  elements.scriptInput.disabled = true;
+  elements.voiceSelect.disabled = true;
+  elements.voiceFilterSelect.disabled = true;
+  elements.pronunciationRules.disabled = true;
+  elements.speedInput.disabled = true;
+  elements.outputFormat.disabled = true;
+  setParagraphEditorBusy(true);
+  setProgress(15);
+  setStatus("Regenerating paragraph " + (index + 1) + " locally with " + voice + " at " + speed.toFixed(2) + "×…");
+
+  try {
+    const tts = state.tts || await getTTS();
+    const outputFormat = elements.outputFormat.value;
+    if (outputFormat === "mp3") await getLameJS();
+    const spokenText = transformTextForSpeech(paragraph.text, pronunciation.rules);
+    const blob = await generateSelectedSpeechBlob(
+      tts, spokenText, voice, speed, outputFormat, controller.signal
+    );
+    throwIfAborted(controller.signal);
+    state.generatedParagraphBlobs[index] = blob;
+    updateParagraphAudioResult(index, blob, voice, speed, outputFormat);
+    setProgress(85);
+    await refreshZipDownload();
+    setProgress(100);
+    setStatus(
+      "Paragraph " + (index + 1) + " regenerated. Its section file and ZIP bundle are updated; the full-script file keeps the studio-default voice and pace.",
+      "good"
+    );
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === "AbortError") {
+      setStatus("Paragraph regeneration stopped. The previous section audio remains available.", "normal");
+    } else {
+      console.error(error);
+      setProgress(0);
+      setStatus("Could not regenerate paragraph " + (index + 1) + ": " + (error?.message || String(error)), "error");
+    }
+  } finally {
+    state.isGenerating = false;
+    state.activeAbortController = null;
+    elements.cancelButton.hidden = true;
+    elements.cancelButton.disabled = true;
+    elements.scriptInput.disabled = false;
+    elements.voiceSelect.disabled = state.voiceCatalog.length === 0;
+    elements.voiceFilterSelect.disabled = false;
+    elements.pronunciationRules.disabled = false;
+    elements.speedInput.disabled = false;
+    elements.outputFormat.disabled = false;
+    elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
+    elements.loadButton.disabled = Boolean(state.tts);
+    setParagraphEditorBusy(false);
+    updatePreviewButtonState();
+    updateBenchmarkButtonState();
+  }
+}
+
 const BENCHMARK_SCRIPTS = {
   balanced: "Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.",
   creator: "Wait, this is actually impressive! You can turn a rough idea into a finished video in minutes. The best part? You stay in control from the first line to the final export. Let's make something great.",
