@@ -27,6 +27,16 @@ test("does not split common abbreviations or initials", () => {
   ]);
 });
 
+test("keeps common dotted abbreviations inside sentences", () => {
+  assert.deepEqual(splitLineIntoSentences(
+    "Use e.g. this example. The U.S. and U.K. teams agreed. Meet at 5 p.m. tomorrow."
+  ), [
+    "Use e.g. this example.",
+    "The U.S. and U.K. teams agreed.",
+    "Meet at 5 p.m. tomorrow."
+  ]);
+});
+
 test("preserves punctuation and closing quotation marks", () => {
   assert.deepEqual(splitLineIntoSentences('She asked, "Are you ready?" Then they left.'), [
     'She asked, "Are you ready?"', "Then they left."
