@@ -286,56 +286,31 @@ try {
   assert.equal(await page.locator("#fullScriptAudio .format-tag").innerText(), "MP3");
   report.checks.mp3Output = true;
 
-  // Test the independent Supertonic 3 browser engine; it does not add to the Kokoro list.
-  assert.equal(await page.locator("#speechEngineSelect option").count(), 2, "Expected separate Kokoro and Supertonic engine choices.");
-  await page.locator("#speechEngineSelect").selectOption("supertonic");
-  // The preceding Kokoro check switches to MP3; explicitly select WAV for these model tests.
-  await page.locator("#outputFormat").selectOption("wav");
-  assert.equal(await page.locator("#supertonicEngineControls").isVisible(), true);
-  assert.equal(await page.locator("#kokoroEngineControls").isVisible(), false);
-  const languageOptions = await page.locator("#supertonicLanguageSelect option").count();
-  const styleOptions = await page.locator("#supertonicVoiceStyleSelect option").count();
-  assert.equal(languageOptions, 32, "Expected 31 named languages plus language-agnostic mode.");
-  assert.equal(styleOptions, 10, "Expected ten Supertonic preset styles.");
-  report.supertonicLanguageOptionCount = languageOptions;
-  report.supertonicVoiceStyleCount = styleOptions;
-  report.checks.supertonicControlsPresent = true;
+  // Exercise the English voice filters and preset speaking speeds.
+  assert.equal(await page.locator("#voiceFilterSelect option").count(), 5, "Expected all, accent and gender filters.");
+  await page.locator("#voiceFilterSelect").selectOption("american");
+  const americanCount = await page.locator("#voiceSelect option").count();
+  assert.equal(americanCount, 20, "Expected 20 American English voices.");
+  await page.locator("#voiceFilterSelect").selectOption("british");
+  const britishCount = await page.locator("#voiceSelect option").count();
+  assert.equal(britishCount, 8, "Expected 8 British English voices.");
+  await page.locator("#voiceFilterSelect").selectOption("female");
+  const femaleCount = await page.locator("#voiceSelect option").count();
+  assert.equal(femaleCount, 15, "Expected 15 female voices.");
+  await page.locator("#voiceFilterSelect").selectOption("male");
+  const maleCount = await page.locator("#voiceSelect option").count();
+  assert.equal(maleCount, 13, "Expected 13 male voices.");
+  await page.locator("#voiceFilterSelect").selectOption("all");
+  assert.equal(await page.locator("#voiceSelect option").count(), 28);
+  report.voiceFilters = { americanCount, britishCount, femaleCount, maleCount };
+  report.checks.englishVoiceFilters = true;
 
-  await page.locator("#acceptSupertonicLicense").check();
-  await page.locator("#loadSupertonicButton").click();
-  await page.waitForFunction(() => {
-    const status = document.querySelector("#supertonicModelStatus")?.textContent || "";
-    return status.startsWith("Ready · 31 languages") || status.startsWith("Could not load Supertonic 3:");
-  }, null, { timeout: 20 * 60 * 1000 });
-  const supertonicStatus = await page.locator("#supertonicModelStatus").innerText();
-  assert(supertonicStatus.startsWith("Ready · 31 languages"), "Supertonic 3 failed to load: " + supertonicStatus);
-  report.checks.supertonicOnnxModelLoaded = true;
-
-  await page.locator("#supertonicLanguageSelect").selectOption("hi");
-  await page.locator("#supertonicVoiceStyleSelect").selectOption("M1");
-  await page.locator("#scriptInput").fill("नमस्ते, यह आवाज़ आपके डिवाइस पर स्थानीय रूप से तैयार की गई है।");
-  await page.locator("#generateButton").click();
-  await waitForGeneration(page);
-  const hindiWav = await inspectAudio(page, "#fullScriptAudio audio");
-  assert(hindiWav.validWav && hindiWav.sizeBytes > 44, "Supertonic did not produce a valid local Hindi WAV.");
-  report.supertonicHindiWav = hindiWav;
-  report.checks.supertonicHindiLocalSynthesis = true;
-
-  await page.locator("#supertonicLanguageSelect").selectOption("es");
-  await page.locator("#supertonicVoiceStyleSelect").selectOption("F1");
-  await page.locator("#scriptInput").fill("Hola, esta voz se genera directamente en tu dispositivo.");
-  await page.locator("#generateButton").click();
-  await waitForGeneration(page);
-  const spanishWav = await inspectAudio(page, "#fullScriptAudio audio");
-  assert(spanishWav.validWav && spanishWav.sizeBytes > 44, "Supertonic did not produce a valid local Spanish WAV.");
-  report.supertonicSpanishWav = spanishWav;
-  report.checks.supertonicSpanishLocalSynthesis = true;
-
-  await page.locator("#speechEngineSelect").selectOption("kokoro");
-  const kokoroAfterSupertonic = await page.locator("#voiceSelect option").evaluateAll(options => options.map(o => o.value));
-  assert.equal(kokoroAfterSupertonic.length, 28);
-  assert(!kokoroAfterSupertonic.includes("zf_xiaoyi") && !kokoroAfterSupertonic.includes("ff_siwis"));
-  report.checks.supertonicDoesNotAddKokoroVoiceIds = true;
+  await page.locator('[data-speed-preset="1.15"]').click();
+  assert.equal(await page.locator("#speedInput").inputValue(), "1.15");
+  assert.equal(await page.locator('[data-speed-preset="1.15"]').getAttribute("aria-pressed"), "true");
+  await page.locator('[data-speed-preset="1.00"]').click();
+  assert.equal(await page.locator("#speedInput").inputValue(), "1.00");
+  report.checks.speakingPacePresets = true;
 
   // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];
@@ -366,6 +341,23 @@ try {
   report.checks.voiceAssetsResolved = report.resolvedVoiceAssetResponses.length >= expectedVoiceAssets.length;
   assert.equal(report.checks.voiceAssetRequestsObserved, true, "One or more voice asset URLs were not requested.");
   assert.equal(report.checks.voiceAssetsResolved, true, "Expected successful CDN responses for all 28 voice assets.");
+
+  // Pronunciation guidance is saved locally and applied to English speech.
+  const pronunciationRules = "OpenAI = Open A I\\nYouTube = You Tube\\nSQL = sequel";
+  await page.locator("#pronunciationRules").fill(pronunciationRules);
+  assert.equal(await page.evaluate(() => localStorage.getItem("nextgen-voiceover-pronunciation-v1")), pronunciationRules,
+    "Pronunciation rules were not saved locally.");
+  assert.match(await page.locator("#pronunciationStatus").innerText(), /3 pronunciation rule/);
+  report.checks.pronunciationRulesAutosave = true;
+  await page.locator("#scriptInput").fill("OpenAI and YouTube are tools for creators. SQL is a database language.");
+  await page.locator("#outputFormat").selectOption("wav");
+  await page.locator("#generateButton").click();
+  await waitForGeneration(page);
+  const pronunciationWav = await inspectAudio(page, "#fullScriptAudio audio");
+  assert(pronunciationWav.validWav && pronunciationWav.sizeBytes > 44,
+    "English synthesis with pronunciation rules did not produce a valid WAV.");
+  report.pronunciationWav = pronunciationWav;
+  report.checks.pronunciationRuleSynthesis = true;
 
   report.checks.passed = true;
   console.log("PAGES_FULL_SCRIPT_PARAGRAPH_WAV_SMOKE_TEST_PASSED");
