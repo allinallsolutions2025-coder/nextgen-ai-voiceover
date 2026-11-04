@@ -329,6 +329,72 @@ function setParagraphEditorBusy(busy) {
   if (!busy) updateParagraphEditorControls();
 }
 
+function handleParagraphEditorInput(event) {
+  const textarea = event.target.closest(".paragraph-editor-text");
+  if (!textarea) return;
+  const index = Number(textarea.dataset.paragraphIndex);
+  if (!Number.isInteger(index) || !state.paragraphs[index]) return;
+  state.paragraphs[index] = { ...state.paragraphs[index], text: textarea.value };
+  elements.scriptInput.value = serializeParagraphs(state.paragraphs);
+  const meta = textarea.closest(".paragraph-editor-card")?.querySelector(".paragraph-editor-heading small");
+  if (meta) meta.textContent = textarea.value.length.toLocaleString() + " characters";
+  updateScriptCounts();
+  saveDraftLocally();
+  persistParagraphSettings();
+  updateSpokenTextPreview();
+  clearResults();
+}
+
+function handleParagraphEditorChange(event) {
+  const select = event.target.closest(".paragraph-editor-voice, .paragraph-editor-speed");
+  if (!select) return;
+  const index = Number(select.dataset.paragraphIndex);
+  if (!Number.isInteger(index) || !state.paragraphs[index]) return;
+  if (select.classList.contains("paragraph-editor-voice")) {
+    state.paragraphs[index] = { ...state.paragraphs[index], voice: select.value };
+    if (select.value) rememberRecentVoice(select.value);
+  } else {
+    state.paragraphs[index] = { ...state.paragraphs[index], speed: select.value };
+  }
+  persistParagraphSettings();
+  const voice = state.paragraphs[index].voice || elements.voiceSelect.value;
+  const speed = state.paragraphs[index].speed || Number(elements.speedInput.value).toFixed(2);
+  updateParagraphEditorStatus(
+    "Paragraph " + (index + 1) + " uses " + (voice || "studio voice") + " at " + speed + "×. Regenerate its section file to apply changes."
+  );
+}
+
+function handleParagraphEditorAction(event) {
+  const button = event.target.closest("[data-paragraph-action]");
+  if (!button || button.disabled) return;
+  const index = Number(button.dataset.paragraphIndex);
+  const action = button.dataset.paragraphAction;
+  if (action === "move-up" || action === "move-down") {
+    state.paragraphs = moveParagraph(state.paragraphs, index, action === "move-up" ? -1 : 1);
+    applyParagraphStructureChange("Paragraph order updated. Generate again to refresh the audio exports.");
+    return;
+  }
+  if (action === "split") {
+    const textarea = button.closest(".paragraph-editor-card")?.querySelector(".paragraph-editor-text");
+    const split = splitParagraph(state.paragraphs, index, textarea?.selectionStart);
+    if (!split) {
+      updateParagraphEditorStatus("Place the text cursor inside the paragraph where you want to split it.", "error");
+      return;
+    }
+    state.paragraphs = split;
+    applyParagraphStructureChange("Paragraph split. Both sections are ready to generate.");
+    return;
+  }
+  if (action === "merge") {
+    const merged = mergeParagraphWithNext(state.paragraphs, index);
+    if (!merged) return;
+    state.paragraphs = merged;
+    applyParagraphStructureChange("Paragraphs merged. Generate again to refresh the audio exports.");
+    return;
+  }
+  if (action === "regenerate") void regenerateParagraph(index);
+}
+
 function persistVoicePreferences() {
   try {
     localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...state.favoriteVoiceIds]));
