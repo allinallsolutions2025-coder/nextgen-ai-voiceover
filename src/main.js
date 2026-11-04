@@ -335,6 +335,7 @@ function setSpeed(value) {
     button.setAttribute("aria-pressed", String(Number(button.dataset.speedPreset) === speed));
   }
   clearResults();
+  clearBenchmarkResults();
 }
 
 async function loadModel() {
@@ -868,6 +869,7 @@ elements.voiceFilterSelect.addEventListener("change", () => {
 elements.pronunciationRules.addEventListener("input", () => {
   savePronunciationRules();
   clearResults();
+  clearBenchmarkResults();
 });
 elements.enhanceSpokenText.addEventListener("change", saveSpokenTextPreference);
 elements.benchmarkPreset.addEventListener("change", () => {
