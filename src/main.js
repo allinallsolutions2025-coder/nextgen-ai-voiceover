@@ -3,6 +3,10 @@ import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
 import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 import { prepareNarrationText, splitNarrationSections } from "./lib/narration.js";
+import {
+  mergeParagraphWithNext, moveParagraph, reconcileParagraphs,
+  serializeParagraphs, splitParagraph
+} from "./lib/paragraph-editor.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
@@ -13,11 +17,15 @@ const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
 const FAVORITES_STORAGE_KEY = "nextgen-voiceover-favorite-voices-v1";
 const RECENT_VOICES_STORAGE_KEY = "nextgen-voiceover-recent-voices-v1";
+const PARAGRAPH_SETTINGS_STORAGE_KEY = "nextgen-voiceover-paragraph-settings-v1";
 const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
   scriptInput: document.querySelector("#scriptInput"),
+  paragraphEditorDetails: document.querySelector("#paragraphEditorDetails"),
+  paragraphEditorStatus: document.querySelector("#paragraphEditorStatus"),
+  paragraphEditorList: document.querySelector("#paragraphEditorList"),
   characterCount: document.querySelector("#characterCount"),
   paragraphCount: document.querySelector("#paragraphCount"),
   voiceSelect: document.querySelector("#voiceSelect"),
@@ -72,7 +80,11 @@ const state = {
   isPreviewing: false,
   isBenchmarking: false,
   favoriteVoiceIds: new Set(),
-  recentVoiceIds: []
+  recentVoiceIds: [],
+  paragraphs: [],
+  generatedParagraphBlobs: [],
+  fullScriptBlob: null,
+  outputExtension: "wav"
 };
 
 function setStatus(message, kind = "normal") {
@@ -131,6 +143,190 @@ function updateBenchmarkButtonState() {
   if (!elements.runBenchmarkButton) return;
   elements.runBenchmarkButton.disabled = !state.tts || state.voiceCatalog.length !== 28 ||
     state.isGenerating || state.isPreviewing || state.isBenchmarking;
+}
+
+function persistParagraphSettings() {
+  try {
+    localStorage.setItem(PARAGRAPH_SETTINGS_STORAGE_KEY, JSON.stringify(state.paragraphs));
+  } catch {
+    // The editor remains available for the current tab when storage is unavailable.
+  }
+}
+
+function restoreParagraphSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PARAGRAPH_SETTINGS_STORAGE_KEY) || "[]");
+    state.paragraphs = reconcileParagraphs(elements.scriptInput.value, Array.isArray(saved) ? saved : []);
+  } catch {
+    state.paragraphs = reconcileParagraphs(elements.scriptInput.value, []);
+  }
+}
+
+function syncParagraphsFromScript() {
+  state.paragraphs = reconcileParagraphs(elements.scriptInput.value, state.paragraphs);
+  persistParagraphSettings();
+  renderParagraphEditor();
+}
+
+function updateParagraphEditorStatus(message, kind = "normal") {
+  elements.paragraphEditorStatus.textContent = message;
+  elements.paragraphEditorStatus.className = "paragraph-editor-status" +
+    (kind === "error" ? " status-error" : kind === "good" ? " status-good" : "");
+}
+
+function updateParagraphEditorControls() {
+  const busy = state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-regenerate")) {
+    const index = Number(button.dataset.paragraphIndex);
+    const hasAudio = Boolean(state.generatedParagraphBlobs[index]);
+    button.disabled = busy || !hasAudio;
+    button.textContent = hasAudio ? "Regenerate section" : "Generate with script";
+  }
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-move-up")) {
+    button.disabled = busy || Number(button.dataset.paragraphIndex) === 0;
+  }
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-move-down")) {
+    button.disabled = busy || Number(button.dataset.paragraphIndex) === state.paragraphs.length - 1;
+  }
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-split, .paragraph-action-merge")) {
+    button.disabled = busy;
+  }
+  for (const input of elements.paragraphEditorList.querySelectorAll("textarea, select")) input.disabled = busy;
+}
+
+function appendParagraphAction(container, label, action, index, className, disabled = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button button-secondary paragraph-action " + className;
+  button.dataset.paragraphAction = action;
+  button.dataset.paragraphIndex = String(index);
+  button.textContent = label;
+  button.disabled = disabled;
+  container.append(button);
+  return button;
+}
+
+function renderParagraphEditor() {
+  if (!elements.paragraphEditorList) return;
+  elements.paragraphEditorList.replaceChildren();
+  const count = state.paragraphs.length;
+  elements.paragraphEditorDetails.hidden = count === 0;
+  if (!count) {
+    updateParagraphEditorStatus("Add a blank line in your script to create another paragraph.");
+    return;
+  }
+
+  const globalVoice = elements.voiceSelect.value || "af_heart";
+  const globalSpeed = Number(elements.speedInput.value) || 1;
+  updateParagraphEditorStatus(
+    count + (count === 1 ? " paragraph ready." : " paragraphs ready.") +
+    " Section overrides are optional; leave them on studio default to inherit the main settings."
+  );
+
+  state.paragraphs.forEach((paragraph, index) => {
+    const card = document.createElement("article");
+    card.className = "paragraph-editor-card";
+    card.dataset.paragraphId = paragraph.id;
+
+    const heading = document.createElement("div");
+    heading.className = "paragraph-editor-heading";
+    const title = document.createElement("strong");
+    title.textContent = "Paragraph " + (index + 1);
+    const meta = document.createElement("small");
+    meta.textContent = paragraph.text.length.toLocaleString() + " characters";
+    heading.append(title, meta);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "paragraph-editor-text";
+    textarea.dataset.paragraphIndex = String(index);
+    textarea.rows = Math.max(3, Math.min(7, Math.ceil(paragraph.text.length / 90)));
+    textarea.maxLength = 20000;
+    textarea.value = paragraph.text;
+    textarea.setAttribute("aria-label", "Text for paragraph " + (index + 1));
+
+    const settings = document.createElement("div");
+    settings.className = "paragraph-editor-settings";
+
+    const voiceField = document.createElement("label");
+    voiceField.className = "paragraph-editor-field";
+    const voiceLabel = document.createElement("span");
+    voiceLabel.textContent = "Voice";
+    const voiceSelect = document.createElement("select");
+    voiceSelect.className = "paragraph-editor-voice";
+    voiceSelect.dataset.paragraphIndex = String(index);
+    voiceSelect.setAttribute("aria-label", "Voice for paragraph " + (index + 1));
+    const defaultVoice = document.createElement("option");
+    defaultVoice.value = "";
+    defaultVoice.textContent = "Studio default · " + (state.voiceCatalog.find(voice => voice.id === globalVoice)?.name || globalVoice);
+    voiceSelect.append(defaultVoice);
+    for (const voice of state.voiceCatalog) {
+      const option = document.createElement("option");
+      option.value = voice.id;
+      option.textContent = voice.name + " · " + voice.languageLabel;
+      voiceSelect.append(option);
+    }
+    voiceSelect.value = paragraph.voice || "";
+    voiceField.append(voiceLabel, voiceSelect);
+
+    const speedField = document.createElement("label");
+    speedField.className = "paragraph-editor-field";
+    const speedLabel = document.createElement("span");
+    speedLabel.textContent = "Speaking pace";
+    const speedSelect = document.createElement("select");
+    speedSelect.className = "paragraph-editor-speed";
+    speedSelect.dataset.paragraphIndex = String(index);
+    speedSelect.setAttribute("aria-label", "Speaking pace for paragraph " + (index + 1));
+    const defaultSpeed = document.createElement("option");
+    defaultSpeed.value = "";
+    defaultSpeed.textContent = "Studio default · " + globalSpeed.toFixed(2) + "×";
+    speedSelect.append(defaultSpeed);
+    for (let value = 0.5; value <= 2.0001; value += 0.05) {
+      const option = document.createElement("option");
+      option.value = value.toFixed(2);
+      option.textContent = value.toFixed(2) + "×";
+      speedSelect.append(option);
+    }
+    speedSelect.value = paragraph.speed || "";
+    speedField.append(speedLabel, speedSelect);
+    settings.append(voiceField, speedField);
+
+    const actions = document.createElement("div");
+    actions.className = "paragraph-editor-actions";
+    appendParagraphAction(actions, "↑ Move up", "move-up", index, "paragraph-action-move-up", index === 0);
+    appendParagraphAction(actions, "↓ Move down", "move-down", index, "paragraph-action-move-down", index === count - 1);
+    appendParagraphAction(actions, "Split at cursor", "split", index, "paragraph-action-split");
+    appendParagraphAction(actions, "Merge next", "merge", index, "paragraph-action-merge", index === count - 1);
+    appendParagraphAction(
+      actions,
+      state.generatedParagraphBlobs[index] ? "Regenerate section" : "Generate with script",
+      "regenerate",
+      index,
+      "paragraph-action-regenerate",
+      !state.generatedParagraphBlobs[index]
+    );
+
+    card.append(heading, textarea, settings, actions);
+    elements.paragraphEditorList.append(card);
+  });
+  updateParagraphEditorControls();
+}
+
+function applyParagraphStructureChange(message) {
+  elements.scriptInput.value = serializeParagraphs(state.paragraphs);
+  updateScriptCounts();
+  saveDraftLocally();
+  persistParagraphSettings();
+  updateSpokenTextPreview();
+  clearResults();
+  renderParagraphEditor();
+  updateParagraphEditorStatus(message, "good");
+}
+
+function setParagraphEditorBusy(busy) {
+  for (const input of elements.paragraphEditorList.querySelectorAll("textarea, select, button")) {
+    input.disabled = busy;
+  }
+  if (!busy) updateParagraphEditorControls();
 }
 
 function persistVoicePreferences() {
