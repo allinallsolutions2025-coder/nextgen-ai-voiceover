@@ -1485,7 +1485,7 @@ async function generateAudio() {
       state.projectExport.subtitleTiming = "Subtitle timing could not be measured in this browser.";
       elements.subtitleStatus.textContent = "Audio is ready, but caption timing could not be measured: " +
         (subtitleError?.message || String(subtitleError));
-      elements.subtitleDownloads.hidden = false;
+      elements.subtitleDownloads.hidden = true;
     }
     setStatus("Packaging audio, captions and script files into the creator project ZIP…");
     setProgress(96);
@@ -1493,10 +1493,10 @@ async function generateAudio() {
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
       "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
-      formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×";
+      formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×" +
+      (state.subtitleSrtBlob && state.subtitleVttBlob ? " · SRT + VTT captions ready" : "");
     setProgress(100);
-    setStatus("English voiceover complete. Preview or download the full script, individual paragraphs, or the complete " +
-      formatLabel(outputFormat) + " bundle.", "good");
+    setStatus("English voiceover complete. Preview the audio, download SRT/VTT captions, or export the complete creator project ZIP.", "good");
   } catch (error) {
     if (controller.signal.aborted || error?.name === "AbortError") {
       setStatus("Generation stopped. Completed paragraph audio remains available below.", "normal");
