@@ -1,7 +1,7 @@
 // English-first browser-local voiceover studio.
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
-import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";
+import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
