@@ -49,16 +49,21 @@ export function applyPronunciationRules(text, rulesOrSource = []) {
   const parsed = Array.isArray(rulesOrSource)
     ? { rules: rulesOrSource }
     : parsePronunciationRules(rulesOrSource);
-  let result = String(text ?? "");
+  const original = String(text ?? "");
+  if (!parsed.rules.length) return original;
 
-  for (const rule of parsed.rules) {
-    const pattern = new RegExp(
-      "(^|[^\\p{L}\\p{N}_])(" + escapeRegex(rule.match) + ")(?=$|[^\\p{L}\\p{N}_])",
-      "giu"
-    );
-    result = result.replace(pattern, (_whole, prefix, matched) =>
-      prefix + preserveCase(matched, rule.replacement)
-    );
-  }
-  return result;
+  // Prefer the longest phrase when rules overlap, then replace the original
+  // script in one pass. Replacement text is never processed a second time.
+  const orderedRules = [...parsed.rules].sort((left, right) => right.match.length - left.match.length);
+  const ruleByKey = new Map(orderedRules.map(rule => [rule.match.toLocaleLowerCase("en-US"), rule]));
+  const alternatives = orderedRules.map(rule => escapeRegex(rule.match)).join("|");
+  const pattern = new RegExp(
+    "(^|[^\\p{L}\\p{N}_])(" + alternatives + ")(?=$|[^\\p{L}\\p{N}_])",
+    "giu"
+  );
+
+  return original.replace(pattern, (whole, prefix, matched) => {
+    const rule = ruleByKey.get(matched.toLocaleLowerCase("en-US"));
+    return rule ? prefix + preserveCase(matched, rule.replacement) : whole;
+  });
 }

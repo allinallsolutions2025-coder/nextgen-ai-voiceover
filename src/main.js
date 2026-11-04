@@ -361,7 +361,10 @@ async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
   if (!speechChunks.length) throw new Error("No speech text was available to generate.");
   if (!state.TextSplitterStream) throw new Error("Kokoro's streaming text splitter is unavailable.");
   const splitter = new state.TextSplitterStream();
-  for (const chunk of speechChunks) splitter.push(chunk + "\n");
+  // Let Kokoro detect punctuation and length boundaries itself. Appending a
+  // newline after every chunk can trigger a TextSplitterStream hang when a
+  // chunk ends with a URL or @mention in Kokoro.js 1.2.1.
+  splitter.push(speechChunks.join(" "));
   splitter.close();
 
   const waveChunks = [];

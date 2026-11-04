@@ -1,6 +1,8 @@
 const ABBREVIATIONS = new Set([
   "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs",
-  "etc", "e.g", "i.e", "fig", "no", "dept", "est"
+  "etc", "e.g", "i.e", "u.s", "u.k", "u.n", "a.m", "p.m", "ph.d",
+  "fig", "no", "dept", "est", "inc", "ltd", "co", "corp",
+  "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"
 ]);
 
 export function cleanCopiedLine(rawLine) {
@@ -33,7 +35,16 @@ function isSentencePeriod(line, segmentStart, punctuationIndex, punctuationEnd) 
   if (/\d/.test(previous) && /\d/.test(next)) return false;
 
   const prefix = line.slice(segmentStart, punctuationIndex);
-  const wordMatch = prefix.match(/([A-Za-z]+)$/);
+  // The first dot in e.g./i.e./a.m./p.m. needs a look-ahead because the
+  // abbreviation is not complete until its second letter and period.
+  const precedingLetter = prefix.match(/([A-Za-z])$/)?.[1] ?? "";
+  const followingDottedLetter = line.slice(punctuationEnd).match(/^([A-Za-z])[.]/)?.[1] ?? "";
+  const dottedPair = (precedingLetter + "." + followingDottedLetter).toLowerCase();
+  if (followingDottedLetter && ABBREVIATIONS.has(dottedPair)) return false;
+
+  // Keep dotted initials and abbreviations such as e.g., i.e. and U.S.
+  // intact; the token matcher includes dots before the current period.
+  const wordMatch = prefix.match(/([A-Za-z]+(?:[.][A-Za-z]+)*)$/);
   const precedingWord = wordMatch?.[1]?.toLowerCase();
   if (precedingWord && ABBREVIATIONS.has(precedingWord)) return false;
   if (precedingWord?.length === 1 && /[A-Z]/.test(next)) return false;

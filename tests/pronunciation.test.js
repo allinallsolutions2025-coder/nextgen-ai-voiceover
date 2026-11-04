@@ -22,6 +22,14 @@ test("applies phrase rules and basic capitalization", () => {
   assert.equal(applyPronunciationRules("YouTube and MRBEAST", parsed.rules), "You Tube and MISTER BEAST");
 });
 
+test("does not reprocess text produced by an earlier pronunciation rule", () => {
+  const parsed = parsePronunciationRules("OpenAI = Open A I\nA I = letters A I");
+  assert.equal(
+    applyPronunciationRules("OpenAI and A I", parsed.rules),
+    "Open A I and LETTERS A I"
+  );
+});
+
 test("escapes punctuation in the source phrase", () => {
   const parsed = parsePronunciationRules("C++ = C plus plus");
   assert.equal(applyPronunciationRules("I use C++ daily.", parsed.rules), "I use C plus plus daily.");
