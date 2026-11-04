@@ -24,7 +24,7 @@ const CURRENCIES = {
   "$": { major: "dollar", minor: "cent" },
   "£": { major: "pound", minor: "penny" },
   "€": { major: "euro", minor: "cent" },
-  "₹": { major: "rupee", minor: "paisa" },
+  "₹": { major: "rupee", minor: "paisa", minorPlural: "paise" },
   USD: { major: "dollar", minor: "cent" },
   GBP: { major: "pound", minor: "penny" },
   EUR: { major: "euro", minor: "cent" },
@@ -160,7 +160,7 @@ function currencyWords(code, rawAmount) {
     parts.push(integerToWords(whole) + " " + currency.major + (whole === 1 ? "" : "s"));
   }
   if (minor > 0) {
-    const minorName = currency.minor === "penny" ? (minor === 1 ? "penny" : "pence") : currency.minor + (minor === 1 ? "" : "s");
+    const minorName = minor === 1 ? currency.minor : (currency.minorPlural || (currency.minor === "penny" ? "pence" : currency.minor + "s"));
     parts.push(integerToWords(minor) + " " + minorName);
   }
   return parts.join(" and ");
@@ -199,7 +199,7 @@ function normalizePercentages(text) {
 function normalizeMeasurements(text) {
   const aliases = Object.keys(UNITS).sort((a, b) => b.length - a.length)
     .map(unit => unit.replace(/[|\\{}()[\]^$+*?.-]/g, "\\$&"));
-  const pattern = new RegExp("\\b(\\d+(?:\\.\\d+)?)\\s*(" + aliases.join("|") + ")(?![A-Za-z])", "gi");
+  const pattern = new RegExp("\\b(\\d+(?:,\\d{2,3})*(?:\\.\\d+)?)\\s*(" + aliases.join("|") + ")(?![A-Za-z])", "gi");
   return text.replace(pattern, (whole, rawNumber, rawUnit) => {
     const unit = UNITS[rawUnit.toLowerCase()];
     const quantity = Number(rawNumber);
