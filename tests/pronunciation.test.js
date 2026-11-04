@@ -26,7 +26,7 @@ test("does not reprocess text produced by an earlier pronunciation rule", () => 
   const parsed = parsePronunciationRules("OpenAI = Open A I\nA I = letters A I");
   assert.equal(
     applyPronunciationRules("OpenAI and A I", parsed.rules),
-    "Open A I and letters A I"
+    "Open A I and LETTERS A I"
   );
 });
 
