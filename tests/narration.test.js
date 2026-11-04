@@ -24,6 +24,15 @@ test("speaks grouped measurement quantities as one number", () => {
   assert.equal(prepareNarrationText("The speed reached 3,000 km/h."), "The speed reached three thousand kilometers per hour.");
 });
 
+test("normalizes numeric ranges while preserving phone numbers and version strings", () => {
+  assert.equal(
+    prepareNarrationText("The target is 5–10, or 2.5-3.5, with a 5-10% improvement."),
+    "The target is five to ten, or two point five to three point five, with a five to ten percent improvement."
+  );
+  const identifiers = "Call 555-123-4567 or install v2.4-2.5.";
+  assert.equal(prepareNarrationText(identifiers), identifiers);
+});
+
 test("normalizes ISO and written English dates", () => {
   assert.equal(
     prepareNarrationText("The release is 2026-11-04. The next review is Nov 5th, 2026."),

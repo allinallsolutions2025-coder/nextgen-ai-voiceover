@@ -11,6 +11,8 @@ const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
+const FAVORITES_STORAGE_KEY = "nextgen-voiceover-favorite-voices-v1";
+const RECENT_VOICES_STORAGE_KEY = "nextgen-voiceover-recent-voices-v1";
 const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 
 const elements = {
@@ -32,6 +34,9 @@ const elements = {
   benchmarkResults: document.querySelector("#benchmarkResults"),
   previewVoiceButton: document.querySelector("#previewVoiceButton"),
   voicePreviewAudio: document.querySelector("#voicePreviewAudio"),
+  favoriteVoiceButton: document.querySelector("#favoriteVoiceButton"),
+  recentVoiceHelp: document.querySelector("#recentVoiceHelp"),
+  spokenPreviewText: document.querySelector("#spokenPreviewText"),
   draftStatus: document.querySelector("#draftStatus"),
   outputFormat: document.querySelector("#outputFormat"),
   speedInput: document.querySelector("#speedInput"),
@@ -65,7 +70,9 @@ const state = {
   activeAbortController: null,
   isGenerating: false,
   isPreviewing: false,
-  isBenchmarking: false
+  isBenchmarking: false,
+  favoriteVoiceIds: new Set(),
+  recentVoiceIds: []
 };
 
 function setStatus(message, kind = "normal") {
@@ -126,10 +133,71 @@ function updateBenchmarkButtonState() {
     state.isGenerating || state.isPreviewing || state.isBenchmarking;
 }
 
+function persistVoicePreferences() {
+  try {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...state.favoriteVoiceIds]));
+    localStorage.setItem(RECENT_VOICES_STORAGE_KEY, JSON.stringify(state.recentVoiceIds));
+  } catch {
+    // Voice preferences remain usable for this tab if storage is unavailable.
+  }
+}
+
+function restoreVoicePreferences() {
+  try {
+    const favorites = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || "[]");
+    const recent = JSON.parse(localStorage.getItem(RECENT_VOICES_STORAGE_KEY) || "[]");
+    state.favoriteVoiceIds = new Set(Array.isArray(favorites)
+      ? favorites.filter(id => typeof id === "string" && /^[ab][fm]_[a-z]+$/.test(id))
+      : []);
+    state.recentVoiceIds = Array.isArray(recent)
+      ? [...new Set(recent.filter(id => typeof id === "string" && /^[ab][fm]_[a-z]+$/.test(id)))].slice(0, 5)
+      : [];
+  } catch {
+    state.favoriteVoiceIds = new Set();
+    state.recentVoiceIds = [];
+  }
+}
+
+function updateRecentVoiceLabel() {
+  if (!elements.recentVoiceHelp) return;
+  const recentNames = state.recentVoiceIds
+    .map(id => state.voiceCatalog.find(voice => voice.id === id)?.name)
+    .filter(Boolean);
+  elements.recentVoiceHelp.textContent = recentNames.length
+    ? "Recently used: " + recentNames.join(" · ")
+    : "Recently used: none yet.";
+}
+
+function rememberRecentVoice(voiceId) {
+  if (!state.supportedVoiceIds.has(voiceId)) return;
+  state.recentVoiceIds = [voiceId, ...state.recentVoiceIds.filter(id => id !== voiceId)].slice(0, 5);
+  persistVoicePreferences();
+  updateRecentVoiceLabel();
+}
+
+function toggleFavoriteVoice() {
+  const voiceId = elements.voiceSelect.value;
+  if (!state.supportedVoiceIds.has(voiceId)) return;
+  if (state.favoriteVoiceIds.has(voiceId)) state.favoriteVoiceIds.delete(voiceId);
+  else state.favoriteVoiceIds.add(voiceId);
+  persistVoicePreferences();
+  renderVoiceSelector();
+  const voiceName = state.voiceCatalog.find(voice => voice.id === voiceId)?.name || voiceId;
+  setStatus(
+    state.favoriteVoiceIds.has(voiceId) ? voiceName + " saved to favorite voices." : voiceName + " removed from favorite voices.",
+    "good"
+  );
+}
+
 function updatePreviewButtonState() {
   const voice = elements.voiceSelect.value;
   const voiceAvailable = Boolean(state.tts && voice && state.supportedVoiceIds.has(voice));
-  elements.previewVoiceButton.disabled = !voiceAvailable || state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  const busy = state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  elements.previewVoiceButton.disabled = !voiceAvailable || busy;
+  elements.favoriteVoiceButton.disabled = !voiceAvailable || busy;
+  const favorite = state.favoriteVoiceIds.has(voice);
+  elements.favoriteVoiceButton.setAttribute("aria-pressed", String(favorite));
+  elements.favoriteVoiceButton.textContent = favorite ? "★ Saved voice" : "☆ Save voice";
   updateBenchmarkButtonState();
 }
 
@@ -226,6 +294,7 @@ function renderVoiceSelector() {
     if (filter === "american") return voice.language === "en-us";
     if (filter === "british") return voice.language === "en-gb";
     if (filter === "female" || filter === "male") return voice.gender.toLowerCase() === filter;
+    if (filter === "favorites") return state.favoriteVoiceIds.has(voice.id);
     return true;
   });
 
@@ -259,6 +328,7 @@ function renderVoiceSelector() {
   elements.voiceSelect.value = preserved?.id || preferred;
   elements.voiceSelect.disabled = filteredVoices.length === 0;
   elements.voiceHelp.textContent = filteredVoices.length + " of 28 English voices shown · American and British accents · generated locally.";
+  updateRecentVoiceLabel();
   updatePreviewButtonState();
 }
 
@@ -286,6 +356,22 @@ function transformTextForSpeech(text, rules = []) {
   return elements.enhanceSpokenText.checked
     ? prepareNarrationText(customPronunciation)
     : customPronunciation;
+}
+
+function updateSpokenTextPreview() {
+  if (!elements.spokenPreviewText) return;
+  const source = elements.scriptInput.value;
+  if (!source.trim()) {
+    elements.spokenPreviewText.textContent = "Your prepared spoken script will appear here.";
+    return;
+  }
+  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
+  if (pronunciation.errors.length) {
+    elements.spokenPreviewText.textContent =
+      "Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " to preview the prepared spoken text.";
+    return;
+  }
+  elements.spokenPreviewText.textContent = transformTextForSpeech(source, pronunciation.rules);
 }
 
 function restoreSpokenTextPreference() {
@@ -472,6 +558,7 @@ async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat,
 async function previewSelectedVoice() {
   if (state.isGenerating || state.isPreviewing) return;
   const selectedVoice = elements.voiceSelect.value;
+  rememberRecentVoice(selectedVoice);
   if (!selectedVoice || !state.supportedVoiceIds.has(selectedVoice)) return;
   const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
   if (pronunciation.errors.length) {
@@ -748,6 +835,7 @@ async function generateAudio() {
     return;
   }
   const selectedVoice = elements.voiceSelect.value || "af_heart";
+  rememberRecentVoice(selectedVoice);
   const speed = Number(elements.speedInput.value);
   clearResults();
 
@@ -882,23 +970,30 @@ async function generateAudio() {
 elements.scriptInput.addEventListener("input", () => {
   updateScriptCounts();
   saveDraftLocally();
+  updateSpokenTextPreview();
   clearResults();
 });
 
 elements.voiceSelect.addEventListener("change", () => {
+  rememberRecentVoice(elements.voiceSelect.value);
   clearResults();
   updatePreviewButtonState();
 });
+elements.favoriteVoiceButton.addEventListener("click", toggleFavoriteVoice);
 elements.voiceFilterSelect.addEventListener("change", () => {
   renderVoiceSelector();
   clearResults();
 });
 elements.pronunciationRules.addEventListener("input", () => {
   savePronunciationRules();
+  updateSpokenTextPreview();
   clearResults();
   clearBenchmarkResults();
 });
-elements.enhanceSpokenText.addEventListener("change", saveSpokenTextPreference);
+elements.enhanceSpokenText.addEventListener("change", () => {
+  saveSpokenTextPreference();
+  updateSpokenTextPreview();
+});
 elements.benchmarkPreset.addEventListener("change", () => {
   elements.benchmarkScript.value = BENCHMARK_SCRIPTS[elements.benchmarkPreset.value] || BENCHMARK_SCRIPTS.balanced;
   clearBenchmarkResults();
@@ -942,7 +1037,9 @@ elements.clearButton.addEventListener("click", () => {
 restoreDraftLocally();
 restorePronunciationRules();
 restoreSpokenTextPreference();
+restoreVoicePreferences();
 updateScriptCounts();
+updateSpokenTextPreview();
 setSpeed(elements.speedInput.value);
 
 window.addEventListener("beforeunload", () => {

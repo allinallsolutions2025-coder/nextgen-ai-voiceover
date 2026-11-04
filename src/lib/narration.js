@@ -196,6 +196,18 @@ function normalizePercentages(text) {
   );
 }
 
+function normalizeNumberRanges(text) {
+  const pattern = /(?<![\p{L}\p{N}_/.$£€₹])([\d]+(?:,[\d]{3})*(?:\.\d+)?)(\s*%?)\s*(?:[-–—]|\bto\b)\s*([\d]+(?:,[\d]{3})*(?:\.\d+)?)(\s*%?)(?![\p{L}\p{N}_/])/giu;
+  return text.replace(pattern, (whole, first, firstPercent, second, secondPercent, offset, source) => {
+    const left = source.slice(Math.max(0, offset - 16), offset);
+    const right = source.slice(offset + whole.length, offset + whole.length + 16);
+    // Preserve phone-like digit groups such as 555-123-4567.
+    if (/\d\s*[-–—]\s*$/.test(left) || /^\s*[-–—]\s*\d/.test(right)) return whole;
+    const percentage = firstPercent.trim() || secondPercent.trim() ? " percent" : "";
+    return numberToWords(first) + " to " + numberToWords(second) + percentage;
+  });
+}
+
 function normalizeMeasurements(text) {
   const aliases = Object.keys(UNITS).sort((a, b) => b.length - a.length)
     .map(unit => unit.replace(/[|\\{}()[\]^$+*?.-]/g, "\\$&"));
@@ -250,6 +262,7 @@ export function prepareNarrationText(text) {
   result = normalizeDates(result);
   result = normalizeTimes(result);
   result = normalizeCurrencies(result);
+  result = normalizeNumberRanges(result);
   result = normalizeMeasurements(result);
   result = normalizePercentages(result);
   result = normalizeOrdinals(result);
