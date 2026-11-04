@@ -13,14 +13,7 @@ const GENDER_ORDER = { Female: 0, Male: 1 };
 
 const BUILT_IN_VOICE_GROUPS = [
   { language: "en-us", female: ["af_alloy", "af_aoede", "af_bella", "af_heart", "af_jessica", "af_kore", "af_nicole", "af_nova", "af_river", "af_sarah", "af_sky"], male: ["am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam", "am_michael", "am_onyx", "am_puck", "am_santa"] },
-  { language: "en-gb", female: ["bf_alice", "bf_emma", "bf_isabella", "bf_lily"], male: ["bm_daniel", "bm_fable", "bm_george", "bm_lewis"] },
-  { language: "ja", female: ["jf_alpha", "jf_gongitsune", "jf_nezumi", "jf_tebukuro"], male: ["jm_kumo"] },
-  { language: "zh", female: ["zf_xiaobei", "zf_xiaoni", "zf_xiaoxiao", "zf_xiaoyi"], male: ["zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang"] },
-  { language: "es", female: ["ef_dora"], male: ["em_alex", "em_santa"] },
-  { language: "fr", female: ["ff_siwis"], male: [] },
-  { language: "hi", female: ["hf_alpha", "hf_beta"], male: ["hm_omega", "hm_psi"] },
-  { language: "it", female: ["if_sara"], male: ["im_nicola"] },
-  { language: "pt-br", female: ["pf_dora"], male: ["pm_alex", "pm_santa"] }
+  { language: "en-gb", female: ["bf_alice", "bf_emma", "bf_isabella", "bf_lily"], male: ["bm_daniel", "bm_fable", "bm_george", "bm_lewis"] }
 ];
 
 function voiceNameFromId(id) {
@@ -49,7 +42,9 @@ export function normalizeVoiceCatalog(rawCatalog) {
   const voices = [];
   for (const [rawId, rawMetadata] of entries) {
     const id = String(rawId ?? "").trim();
-    if (!/^[a-z]{2}_[a-z0-9_]+$/.test(id) || seen.has(id)) continue;
+    // This catalogue is deliberately Kokoro-English only (US + UK).
+    // Multilingual speech is provided by a separate engine, not extra Kokoro IDs.
+    if (!/^[ab][fm]_[a-z0-9_]+$/.test(id) || seen.has(id)) continue;
     seen.add(id);
     const metadata = rawMetadata && typeof rawMetadata === "object" ? rawMetadata : {};
     const language = String(metadata.language ?? LANGUAGE_BY_PREFIX[id[0]] ?? "unknown").toLowerCase();
