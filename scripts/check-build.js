@@ -9,6 +9,11 @@ const requiredFiles = [
   "src/lib/pronunciation.js",
   "src/lib/narration.js",
   "src/lib/paragraph-editor.js",
+  "src/lib/subtitles.js",
+  "src/lib/audio-processing.js",
+  "src/lib/audio-metadata.js",
+  "tests/subtitles.test.js",
+  "tests/audio-processing.test.js",
   "backend/app.py",
   "backend/voice_catalog.py",
   "backend/Dockerfile",
@@ -42,6 +47,13 @@ const requiredHtmlMarkers = [
   'id="fullScriptAudio"',
   'id="fullScriptDownload"',
   'id="zipDownload"',
+  'id="creatorPreset"',
+  'id="normalizeAudio"',
+  'id="trimSilence"',
+  'id="subtitleDownloads"',
+  'id="srtDownload"',
+  'id="vttDownload"',
+  'id="subtitleStatus"',
   'id="draftStatus"',
   'id="previewVoiceButton"',
   'id="voicePreviewAudio"',
@@ -135,6 +147,21 @@ if (!main.includes("runVoiceBenchmark") || !main.includes("addBenchmarkResult") 
   throw new Error("The cancelable 28-voice English audition benchmark is required.");
 }
 
+if (!main.includes("processAudioSamples") || !main.includes("getAudioDurationSeconds") ||
+    !main.includes("buildSubtitleCues") || !main.includes("serializeSrt") ||
+    !main.includes("serializeVtt") || !main.includes("createSubtitleExports")) {
+  throw new Error("Creator audio finishing and SRT/VTT subtitle exports are required.");
+}
+if (!main.includes("original_script.txt") || !main.includes("spoken_script.txt") ||
+    !main.includes("project.json") || !main.includes("full_script.srt") ||
+    !main.includes("full_script.vtt")) {
+  throw new Error("The project ZIP must include audio, captions, original script and prepared spoken text.");
+}
+if (!html.includes('value="shorts"') || !html.includes('value="longform"') ||
+    !html.includes('value="podcast"') || !html.includes('value="narration"') ||
+    !html.includes('id="normalizeAudio"') || !html.includes('id="trimSilence"')) {
+  throw new Error("Creator presets and optional audio finishing controls are required.");
+}
 if (!main.includes("reconcileParagraphs") || !main.includes("serializeParagraphs") ||
     !main.includes("moveParagraph") || !main.includes("splitParagraph") ||
     !main.includes("mergeParagraphWithNext") || !main.includes("regenerateParagraph") ||
