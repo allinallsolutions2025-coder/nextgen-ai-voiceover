@@ -14,6 +14,7 @@ const requiredFiles = [
   "backend/test_voice_catalog.py",
   "backend/README.md",
   "tests/voice-catalog.test.js",
+  "tests/pronunciation.test.js",
   "package.json"
 ];
 
@@ -87,6 +88,16 @@ const backendCatalog = await readFile(new URL("../backend/voice_catalog.py", imp
 if (!backendApp.includes("KPipeline(lang_code=code") || !backendApp.includes("KModel(repo_id=MODEL_REPO_ID)")) throw new Error("The server must use the Kokoro Python multilingual pipeline.");
 if (!backendApp.includes('"/v1/audio/speech"') || !backendApp.includes('"/v1/voices"') || !backendApp.includes("LANGUAGE_TEST_TEXT")) throw new Error("The multilingual API endpoints and per-language checks are required.");
 if (!backendCatalog.includes('"zf_xiaoyi"') || !backendCatalog.includes('"ff_siwis"') || !backendCatalog.includes('"hm_psi"')) throw new Error("The 54-voice server catalogue is incomplete.");
+const voiceCatalog = await readFile(new URL("../src/lib/voice-catalog.js", import.meta.url), "utf8");
+if (!voiceCatalog.includes("af_heart") || !voiceCatalog.includes("bf_emma") ||
+    /zf_xiaoyi|ff_siwis|hf_alpha|pf_dora/.test(voiceCatalog) ||
+    !voiceCatalog.includes("^[ab][fm]_")) {
+  throw new Error("The published voice catalogue must contain only American and British English IDs.");
+}
+if (!main.includes('filter === "american"') || !main.includes('filter === "british"') ||
+    !main.includes('filter === "female"') || !main.includes('filter === "male"')) {
+  throw new Error("English accent and voice-type filters are incomplete.");
+}
 if (main.includes("tts.list_voices()")) throw new Error("Do not use list_voices() as a catalogue return value.");
 if (!main.includes('id = "fullScriptAudio"') || !main.includes('download.id = "fullScriptDownload"')) {
   throw new Error("The app must provide a whole-script audio preview and WAV download.");
