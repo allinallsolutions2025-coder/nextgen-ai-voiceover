@@ -216,8 +216,9 @@ try {
   assert.equal(await page.locator("#voiceSelect option").count(), 1, "Favourite voice filter should show the saved voice.");
   assert.equal(await page.locator("#voiceSelect").inputValue(), "am_adam");
   await page.locator("#voiceFilterSelect").selectOption("all");
-  const spokenPreview = await page.locator("#spokenPreviewText").innerText();
-  assert.match(spokenPreview, /twenty twenty six/, "Prepared spoken-text preview did not reflect the narration cleanup.");
+  const spokenPreview = await page.locator("#spokenPreviewText").textContent();
+  report.spokenPreviewSample = spokenPreview?.slice(0, 240) || "";
+  assert.match(spokenPreview || "", /twenty twenty six/, "Prepared spoken-text preview did not reflect the narration cleanup.");
   report.checks.favoriteVoicePersistenceAndFilter = true;
   report.checks.spokenTextPreviewReflectsTransform = true;
   await page.locator("#voiceSelect").selectOption("am_adam");
