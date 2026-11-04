@@ -1209,8 +1209,10 @@ async function runVoiceBenchmark() {
 }
 
 async function generateAudio() {
-  if (state.isBenchmarking || state.isPreviewing) return;
+  if (state.isGenerating || state.isBenchmarking || state.isPreviewing) return;
   const script = elements.scriptInput.value.trim();
+  state.paragraphs = reconcileParagraphs(script, state.paragraphs);
+  persistParagraphSettings();
   const validation = validateParagraphInput(script, MAX_CHARACTERS, MAX_PARAGRAPHS);
   if (!validation.valid) {
     setStatus(validation.message, "error");
@@ -1243,11 +1245,16 @@ async function generateAudio() {
   for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
   elements.outputFormat.disabled = true;
   elements.runBenchmarkButton.disabled = true;
+  setParagraphEditorBusy(true);
+  renderParagraphEditor();
+  setParagraphEditorBusy(true);
   setProgress(1);
 
   const outputBlobs = [];
+  state.generatedParagraphBlobs = outputBlobs;
   const outputFormat = elements.outputFormat.value;
   const extension = outputFormat === "mp3" ? "mp3" : "wav";
+  state.outputExtension = extension;
   const scriptForSpeech = validation.paragraphs.join("\n\n");
   let tts = state.tts;
   try {
@@ -1271,15 +1278,27 @@ async function generateAudio() {
     for (let index = 0; index < validation.paragraphs.length; index += 1) {
       const paragraphNumber = index + 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
-      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + " locally with English Kokoro…");
+      const paragraph = state.paragraphs[index] || { text: validation.paragraphs[index], voice: "", speed: "" };
+      const paragraphVoice = paragraph.voice || selectedVoice;
+      const paragraphSpeed = Number(paragraph.speed || speed);
+      setStatus(
+        "Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length +
+        " with " + paragraphVoice + " at " + paragraphSpeed.toFixed(2) + "×…"
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
-      const audioBlob = await renderSpeech(validation.paragraphs[index]);
+      const spokenText = transformTextForSpeech(validation.paragraphs[index], pronunciation.rules);
+      const audioBlob = await generateSelectedSpeechBlob(
+        tts, spokenText, paragraphVoice, paragraphSpeed, outputFormat, controller.signal
+      );
       throwIfAborted(controller.signal);
       outputBlobs.push(audioBlob);
+      updateParagraphEditorControls();
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + extension;
+      const excerpt = validation.paragraphs[index].slice(0, 110);
       addAudioResult({
         title: "Paragraph " + paragraphNumber,
-        subtitle: validation.paragraphs[index].slice(0, 110) + (validation.paragraphs[index].length > 110 ? "…" : ""),
+        subtitle: excerpt + (validation.paragraphs[index].length > 110 ? "…" : "") +
+          " · " + paragraphVoice + " · " + paragraphSpeed.toFixed(2) + "×",
         filename, blob: audioBlob, kind: "paragraph", index: paragraphNumber, outputFormat
       });
       completedJobs += 1;
@@ -1298,27 +1317,18 @@ async function generateAudio() {
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
     const engineSubtitle = "Kokoro English · " + selectedVoice;
+    state.fullScriptBlob = fullScriptBlob;
     addAudioResult({
       title: "Full script voiceover",
-      subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×",
+      subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) +
+        "× · studio defaults",
       filename: "full_script." + extension, blob: fullScriptBlob, kind: "full", outputFormat
     });
 
     setStatus("Packaging the full-script and paragraph " + formatLabel(outputFormat) + " files…");
     setProgress(96);
-    const JSZip = await getJSZip();
-    const zip = new JSZip();
-    for (let index = 0; index < outputBlobs.length; index += 1) {
-      zip.file("paragraph_" + String(index + 1).padStart(3, "0") + "." + extension, outputBlobs[index]);
-    }
-    zip.file("full_script." + extension, fullScriptBlob);
-    const zipBlob = await zip.generateAsync({
-      type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
-    });
-    const zipUrl = URL.createObjectURL(zipBlob);
-    state.objectUrls.push(zipUrl);
-    elements.zipDownload.href = zipUrl;
-    elements.zipDownload.hidden = false;
+    await refreshZipDownload();
+    elements.resultsPanel.hidden = false;
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
       "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
@@ -1350,6 +1360,7 @@ async function generateAudio() {
     elements.outputFormat.disabled = false;
     elements.loadButton.disabled = Boolean(state.tts);
     elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
+    setParagraphEditorBusy(false);
     updatePreviewButtonState();
     updateBenchmarkButtonState();
   }
