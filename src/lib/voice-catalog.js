@@ -1,14 +1,9 @@
-const LANGUAGE_BY_PREFIX = {
-  a: "en-us", b: "en-gb", e: "es", f: "fr", h: "hi", i: "it", j: "ja", p: "pt-br", z: "zh"
-};
+const LANGUAGE_BY_PREFIX = { a: "en-us", b: "en-gb" };
 const LANGUAGE_LABELS = {
-  "en-us": "American English", "en-gb": "British English", es: "Spanish",
-  fr: "French", hi: "Hindi", it: "Italian", ja: "Japanese",
-  "pt-br": "Brazilian Portuguese", zh: "Mandarin Chinese"
+  "en-us": "American English",
+  "en-gb": "British English"
 };
-const LANGUAGE_ORDER = {
-  "en-us": 0, "en-gb": 1, es: 2, fr: 3, hi: 4, it: 5, ja: 6, "pt-br": 7, zh: 8
-};
+const LANGUAGE_ORDER = { "en-us": 0, "en-gb": 1 };
 const GENDER_ORDER = { Female: 0, Male: 1 };
 
 const BUILT_IN_VOICE_GROUPS = [
@@ -42,8 +37,7 @@ export function normalizeVoiceCatalog(rawCatalog) {
   const voices = [];
   for (const [rawId, rawMetadata] of entries) {
     const id = String(rawId ?? "").trim();
-    // This catalogue is deliberately Kokoro-English only (US + UK).
-    // Multilingual speech is provided by a separate engine, not extra Kokoro IDs.
+    // The public product catalogue is intentionally limited to American and British English.
     if (!/^[ab][fm]_[a-z0-9_]+$/.test(id) || seen.has(id)) continue;
     seen.add(id);
     const metadata = rawMetadata && typeof rawMetadata === "object" ? rawMetadata : {};
