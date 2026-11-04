@@ -181,7 +181,7 @@ function updateParagraphEditorControls() {
     const index = Number(button.dataset.paragraphIndex);
     const hasAudio = Boolean(state.generatedParagraphBlobs[index] && state.fullScriptBlob);
     button.disabled = busy || !hasAudio;
-    button.textContent = hasAudio ? "Regenerate section" : "Generate with script";
+    button.textContent = hasAudio ? "Regenerate section" : "Generate all first";
   }
   for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-move-up")) {
     button.disabled = busy || Number(button.dataset.paragraphIndex) === 0;
@@ -299,7 +299,7 @@ function renderParagraphEditor() {
     appendParagraphAction(actions, "Merge next", "merge", index, "paragraph-action-merge", index === count - 1);
     appendParagraphAction(
       actions,
-      state.generatedParagraphBlobs[index] ? "Regenerate section" : "Generate with script",
+      state.generatedParagraphBlobs[index] ? "Regenerate section" : "Generate all first",
       "regenerate",
       index,
       "paragraph-action-regenerate",
