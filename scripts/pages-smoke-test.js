@@ -169,7 +169,6 @@ try {
   temporaryDirectory = await mkdtemp(join(tmpdir(), "nextgen-pages-test-"));
 
   // Two paragraphs verify the individual WAVs and one continuous full-script WAV.
-  await page.locator("#speechEngineSelect").selectOption("kokoro");
   await page.locator("#voiceSelect").selectOption("am_adam");
   const firstParagraph = "This is the first short paragraph for the voiceover export test.";
   const secondParagraph = "This is the second paragraph. The full script should also be generated as one continuous voiceover.";
