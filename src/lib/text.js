@@ -38,7 +38,7 @@ function isSentencePeriod(line, segmentStart, punctuationIndex, punctuationEnd) 
   // The first dot in e.g./i.e./a.m./p.m. needs a look-ahead because the
   // abbreviation is not complete until its second letter and period.
   const precedingLetter = prefix.match(/([A-Za-z])$/)?.[1] ?? "";
-  const followingDottedLetter = line.slice(punctuationEnd).match(/^([A-Za-z])\\./)?.[1] ?? "";
+  const followingDottedLetter = line.slice(punctuationEnd).match(/^([A-Za-z])[.]/)?.[1] ?? "";
   const dottedPair = (precedingLetter + "." + followingDottedLetter).toLowerCase();
   if (followingDottedLetter && ABBREVIATIONS.has(dottedPair)) return false;
 
