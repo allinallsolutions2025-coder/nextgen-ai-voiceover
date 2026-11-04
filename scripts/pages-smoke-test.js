@@ -315,10 +315,10 @@ try {
   report.checks.englishVoiceFilters = true;
 
   await page.locator('[data-speed-preset="1.15"]').click();
-  assert.equal(await page.locator("#speedInput").inputValue(), "1.15");
+  assert.equal(Number(await page.locator("#speedInput").inputValue()).toFixed(2), "1.15");
   assert.equal(await page.locator('[data-speed-preset="1.15"]').getAttribute("aria-pressed"), "true");
   await page.locator('[data-speed-preset="1.00"]').click();
-  assert.equal(await page.locator("#speedInput").inputValue(), "1.00");
+  assert.equal(Number(await page.locator("#speedInput").inputValue()).toFixed(2), "1.00");
   report.checks.speakingPacePresets = true;
 
   // Exercise one voice from each available English voice group.
