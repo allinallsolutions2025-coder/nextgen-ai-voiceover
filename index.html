@@ -70,6 +70,18 @@
             <label class="sr-only" for="scriptInput">Voiceover script</label>
             <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Start writing your voiceover here...&#10;&#10;Separate paragraphs with a blank line. Each paragraph can be generated as its own WAV, and the complete script can be rendered as one voiceover."></textarea>
 
+            <details class="paragraph-editor-tools" id="paragraphEditorDetails">
+              <summary>
+                <span><strong>Edit paragraphs individually</strong><small>Reorder, split, merge, and set a different English voice or pace for each section</small></span>
+                <span class="details-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="paragraph-editor-content">
+                <p class="paragraph-editor-note">Per-paragraph voice and pace settings apply to each section file. The combined full-script file uses the studio voice and pace selected on the right.</p>
+                <p id="paragraphEditorStatus" class="paragraph-editor-status" role="status">Add a blank line in your script to create another paragraph.</p>
+                <div id="paragraphEditorList" class="paragraph-editor-list"></div>
+              </div>
+            </details>
+
             <details class="spoken-preview" id="spokenPreview">
               <summary>Review prepared spoken text <span>Preview automatic pronunciation changes</span></summary>
               <pre id="spokenPreviewText" aria-live="polite">Your prepared spoken script will appear here.</pre>
