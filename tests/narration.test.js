@@ -16,6 +16,14 @@ test("speaks common currencies with major and minor units", () => {
   );
 });
 
+test("uses the correct plural form for Indian paise", () => {
+  assert.equal(prepareNarrationText("It costs ₹1.05."), "It costs one rupee and five paise.");
+});
+
+test("speaks grouped measurement quantities as one number", () => {
+  assert.equal(prepareNarrationText("The speed reached 3,000 km/h."), "The speed reached three thousand kilometers per hour.");
+});
+
 test("normalizes ISO and written English dates", () => {
   assert.equal(
     prepareNarrationText("The release is 2026-11-04. The next review is Nov 5th, 2026."),
