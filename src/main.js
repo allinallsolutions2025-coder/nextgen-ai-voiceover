@@ -3,6 +3,10 @@ import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
 import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 import { prepareNarrationText, splitNarrationSections } from "./lib/narration.js";
+import {
+  mergeParagraphWithNext, moveParagraph, reconcileParagraphs,
+  serializeParagraphs, splitParagraph
+} from "./lib/paragraph-editor.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
@@ -13,11 +17,15 @@ const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
 const FAVORITES_STORAGE_KEY = "nextgen-voiceover-favorite-voices-v1";
 const RECENT_VOICES_STORAGE_KEY = "nextgen-voiceover-recent-voices-v1";
+const PARAGRAPH_SETTINGS_STORAGE_KEY = "nextgen-voiceover-paragraph-settings-v1";
 const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
   scriptInput: document.querySelector("#scriptInput"),
+  paragraphEditorDetails: document.querySelector("#paragraphEditorDetails"),
+  paragraphEditorStatus: document.querySelector("#paragraphEditorStatus"),
+  paragraphEditorList: document.querySelector("#paragraphEditorList"),
   characterCount: document.querySelector("#characterCount"),
   paragraphCount: document.querySelector("#paragraphCount"),
   voiceSelect: document.querySelector("#voiceSelect"),
@@ -72,7 +80,12 @@ const state = {
   isPreviewing: false,
   isBenchmarking: false,
   favoriteVoiceIds: new Set(),
-  recentVoiceIds: []
+  recentVoiceIds: [],
+  paragraphs: [],
+  generatedParagraphBlobs: [],
+  fullScriptBlob: null,
+  zipObjectUrl: null,
+  outputExtension: "wav"
 };
 
 function setStatus(message, kind = "normal") {
@@ -131,6 +144,256 @@ function updateBenchmarkButtonState() {
   if (!elements.runBenchmarkButton) return;
   elements.runBenchmarkButton.disabled = !state.tts || state.voiceCatalog.length !== 28 ||
     state.isGenerating || state.isPreviewing || state.isBenchmarking;
+}
+
+function persistParagraphSettings() {
+  try {
+    localStorage.setItem(PARAGRAPH_SETTINGS_STORAGE_KEY, JSON.stringify(state.paragraphs));
+  } catch {
+    // The editor remains available for the current tab when storage is unavailable.
+  }
+}
+
+function restoreParagraphSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PARAGRAPH_SETTINGS_STORAGE_KEY) || "[]");
+    state.paragraphs = reconcileParagraphs(elements.scriptInput.value, Array.isArray(saved) ? saved : []);
+  } catch {
+    state.paragraphs = reconcileParagraphs(elements.scriptInput.value, []);
+  }
+}
+
+function syncParagraphsFromScript() {
+  state.paragraphs = reconcileParagraphs(elements.scriptInput.value, state.paragraphs);
+  persistParagraphSettings();
+  renderParagraphEditor();
+}
+
+function updateParagraphEditorStatus(message, kind = "normal") {
+  elements.paragraphEditorStatus.textContent = message;
+  elements.paragraphEditorStatus.className = "paragraph-editor-status" +
+    (kind === "error" ? " status-error" : kind === "good" ? " status-good" : "");
+}
+
+function updateParagraphEditorControls() {
+  const busy = state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-regenerate")) {
+    const index = Number(button.dataset.paragraphIndex);
+    const hasAudio = Boolean(state.generatedParagraphBlobs[index] && state.fullScriptBlob);
+    button.disabled = busy || !hasAudio;
+    button.textContent = hasAudio ? "Regenerate section" : "Generate all first";
+  }
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-move-up")) {
+    button.disabled = busy || Number(button.dataset.paragraphIndex) === 0;
+  }
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-move-down")) {
+    button.disabled = busy || Number(button.dataset.paragraphIndex) === state.paragraphs.length - 1;
+  }
+  for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-split, .paragraph-action-merge")) {
+    button.disabled = busy;
+  }
+  for (const input of elements.paragraphEditorList.querySelectorAll("textarea, select")) input.disabled = busy;
+}
+
+function appendParagraphAction(container, label, action, index, className, disabled = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button button-secondary paragraph-action " + className;
+  button.dataset.paragraphAction = action;
+  button.dataset.paragraphIndex = String(index);
+  button.textContent = label;
+  button.disabled = disabled;
+  container.append(button);
+  return button;
+}
+
+function renderParagraphEditor() {
+  if (!elements.paragraphEditorList) return;
+  elements.paragraphEditorList.replaceChildren();
+  const count = state.paragraphs.length;
+  elements.paragraphEditorDetails.hidden = count === 0;
+  if (!count) {
+    updateParagraphEditorStatus("Add a blank line in your script to create another paragraph.");
+    return;
+  }
+
+  const globalVoice = elements.voiceSelect.value || "af_heart";
+  const globalSpeed = Number(elements.speedInput.value) || 1;
+  updateParagraphEditorStatus(
+    count + (count === 1 ? " paragraph ready." : " paragraphs ready.") +
+    " Section overrides are optional; leave them on studio default to inherit the main settings."
+  );
+
+  state.paragraphs.forEach((paragraph, index) => {
+    const card = document.createElement("article");
+    card.className = "paragraph-editor-card";
+    card.dataset.paragraphId = paragraph.id;
+
+    const heading = document.createElement("div");
+    heading.className = "paragraph-editor-heading";
+    const title = document.createElement("strong");
+    title.textContent = "Paragraph " + (index + 1);
+    const meta = document.createElement("small");
+    meta.textContent = paragraph.text.length.toLocaleString() + " characters";
+    heading.append(title, meta);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "paragraph-editor-text";
+    textarea.dataset.paragraphIndex = String(index);
+    textarea.rows = Math.max(3, Math.min(7, Math.ceil(paragraph.text.length / 90)));
+    textarea.maxLength = 20000;
+    textarea.value = paragraph.text;
+    textarea.setAttribute("aria-label", "Text for paragraph " + (index + 1));
+
+    const settings = document.createElement("div");
+    settings.className = "paragraph-editor-settings";
+
+    const voiceField = document.createElement("label");
+    voiceField.className = "paragraph-editor-field";
+    const voiceLabel = document.createElement("span");
+    voiceLabel.textContent = "Voice";
+    const voiceSelect = document.createElement("select");
+    voiceSelect.className = "paragraph-editor-voice";
+    voiceSelect.dataset.paragraphIndex = String(index);
+    voiceSelect.setAttribute("aria-label", "Voice for paragraph " + (index + 1));
+    const defaultVoice = document.createElement("option");
+    defaultVoice.value = "";
+    defaultVoice.textContent = "Studio default · " + (state.voiceCatalog.find(voice => voice.id === globalVoice)?.name || globalVoice);
+    voiceSelect.append(defaultVoice);
+    for (const voice of state.voiceCatalog) {
+      const option = document.createElement("option");
+      option.value = voice.id;
+      option.textContent = voice.name + " · " + voice.languageLabel;
+      voiceSelect.append(option);
+    }
+    voiceSelect.value = paragraph.voice || "";
+    voiceField.append(voiceLabel, voiceSelect);
+
+    const speedField = document.createElement("label");
+    speedField.className = "paragraph-editor-field";
+    const speedLabel = document.createElement("span");
+    speedLabel.textContent = "Speaking pace";
+    const speedSelect = document.createElement("select");
+    speedSelect.className = "paragraph-editor-speed";
+    speedSelect.dataset.paragraphIndex = String(index);
+    speedSelect.setAttribute("aria-label", "Speaking pace for paragraph " + (index + 1));
+    const defaultSpeed = document.createElement("option");
+    defaultSpeed.value = "";
+    defaultSpeed.textContent = "Studio default · " + globalSpeed.toFixed(2) + "×";
+    speedSelect.append(defaultSpeed);
+    for (let value = 0.5; value <= 2.0001; value += 0.05) {
+      const option = document.createElement("option");
+      option.value = value.toFixed(2);
+      option.textContent = value.toFixed(2) + "×";
+      speedSelect.append(option);
+    }
+    speedSelect.value = paragraph.speed || "";
+    speedField.append(speedLabel, speedSelect);
+    settings.append(voiceField, speedField);
+
+    const actions = document.createElement("div");
+    actions.className = "paragraph-editor-actions";
+    appendParagraphAction(actions, "↑ Move up", "move-up", index, "paragraph-action-move-up", index === 0);
+    appendParagraphAction(actions, "↓ Move down", "move-down", index, "paragraph-action-move-down", index === count - 1);
+    appendParagraphAction(actions, "Split at cursor", "split", index, "paragraph-action-split");
+    appendParagraphAction(actions, "Merge next", "merge", index, "paragraph-action-merge", index === count - 1);
+    appendParagraphAction(
+      actions,
+      state.generatedParagraphBlobs[index] ? "Regenerate section" : "Generate all first",
+      "regenerate",
+      index,
+      "paragraph-action-regenerate",
+      !state.generatedParagraphBlobs[index]
+    );
+
+    card.append(heading, textarea, settings, actions);
+    elements.paragraphEditorList.append(card);
+  });
+  updateParagraphEditorControls();
+}
+
+function applyParagraphStructureChange(message) {
+  elements.scriptInput.value = serializeParagraphs(state.paragraphs);
+  updateScriptCounts();
+  saveDraftLocally();
+  persistParagraphSettings();
+  updateSpokenTextPreview();
+  clearResults();
+  renderParagraphEditor();
+  updateParagraphEditorStatus(message, "good");
+}
+
+function setParagraphEditorBusy(busy) {
+  for (const input of elements.paragraphEditorList.querySelectorAll("textarea, select, button")) {
+    input.disabled = busy;
+  }
+  if (!busy) updateParagraphEditorControls();
+}
+
+function handleParagraphEditorInput(event) {
+  const textarea = event.target.closest(".paragraph-editor-text");
+  if (!textarea) return;
+  const index = Number(textarea.dataset.paragraphIndex);
+  if (!Number.isInteger(index) || !state.paragraphs[index]) return;
+  state.paragraphs[index] = { ...state.paragraphs[index], text: textarea.value };
+  elements.scriptInput.value = serializeParagraphs(state.paragraphs);
+  const meta = textarea.closest(".paragraph-editor-card")?.querySelector(".paragraph-editor-heading small");
+  if (meta) meta.textContent = textarea.value.length.toLocaleString() + " characters";
+  updateScriptCounts();
+  saveDraftLocally();
+  persistParagraphSettings();
+  updateSpokenTextPreview();
+  clearResults();
+}
+
+function handleParagraphEditorChange(event) {
+  const select = event.target.closest(".paragraph-editor-voice, .paragraph-editor-speed");
+  if (!select) return;
+  const index = Number(select.dataset.paragraphIndex);
+  if (!Number.isInteger(index) || !state.paragraphs[index]) return;
+  if (select.classList.contains("paragraph-editor-voice")) {
+    state.paragraphs[index] = { ...state.paragraphs[index], voice: select.value };
+    if (select.value) rememberRecentVoice(select.value);
+  } else {
+    state.paragraphs[index] = { ...state.paragraphs[index], speed: select.value };
+  }
+  persistParagraphSettings();
+  const voice = state.paragraphs[index].voice || elements.voiceSelect.value;
+  const speed = state.paragraphs[index].speed || Number(elements.speedInput.value).toFixed(2);
+  updateParagraphEditorStatus(
+    "Paragraph " + (index + 1) + " uses " + (voice || "studio voice") + " at " + speed + "×. Regenerate its section file to apply changes."
+  );
+}
+
+function handleParagraphEditorAction(event) {
+  const button = event.target.closest("[data-paragraph-action]");
+  if (!button || button.disabled) return;
+  const index = Number(button.dataset.paragraphIndex);
+  const action = button.dataset.paragraphAction;
+  if (action === "move-up" || action === "move-down") {
+    state.paragraphs = moveParagraph(state.paragraphs, index, action === "move-up" ? -1 : 1);
+    applyParagraphStructureChange("Paragraph order updated. Generate again to refresh the audio exports.");
+    return;
+  }
+  if (action === "split") {
+    const textarea = button.closest(".paragraph-editor-card")?.querySelector(".paragraph-editor-text");
+    const split = splitParagraph(state.paragraphs, index, textarea?.selectionStart);
+    if (!split) {
+      updateParagraphEditorStatus("Place the text cursor inside the paragraph where you want to split it.", "error");
+      return;
+    }
+    state.paragraphs = split;
+    applyParagraphStructureChange("Paragraph split. Both sections are ready to generate.");
+    return;
+  }
+  if (action === "merge") {
+    const merged = mergeParagraphWithNext(state.paragraphs, index);
+    if (!merged) return;
+    state.paragraphs = merged;
+    applyParagraphStructureChange("Paragraphs merged. Generate again to refresh the audio exports.");
+    return;
+  }
+  if (action === "regenerate") void regenerateParagraph(index);
 }
 
 function persistVoicePreferences() {
@@ -208,11 +471,15 @@ function revokeObjectUrls() {
 
 function clearResults() {
   revokeObjectUrls();
+  state.generatedParagraphBlobs = [];
+  state.fullScriptBlob = null;
+  state.zipObjectUrl = null;
   elements.audioResults.replaceChildren();
   elements.zipDownload.hidden = true;
   elements.zipDownload.removeAttribute("href");
   elements.resultsSummary.textContent = "Your audio files will appear here.";
   elements.resultsPanel.hidden = true;
+  updateParagraphEditorControls();
 }
 
 function updateScriptCounts() {
@@ -329,13 +596,20 @@ function renderVoiceSelector() {
   elements.voiceSelect.disabled = filteredVoices.length === 0;
   elements.voiceHelp.textContent = filteredVoices.length + " of 28 English voices shown · American and British accents · generated locally.";
   updateRecentVoiceLabel();
+  renderParagraphEditor();
   updatePreviewButtonState();
 }
 
 function populateVoiceSelector(tts = null) {
   state.voiceCatalog = normalizeVoiceCatalog(tts?.voices ?? []);
   state.supportedVoiceIds = new Set(state.voiceCatalog.map((voice) => voice.id));
+  state.paragraphs = state.paragraphs.map(paragraph => ({
+    ...paragraph,
+    voice: paragraph.voice && state.supportedVoiceIds.has(paragraph.voice) ? paragraph.voice : ""
+  }));
+  persistParagraphSettings();
   renderVoiceSelector();
+  renderParagraphEditor();
 }
 
 function updatePronunciationStatus() {
@@ -422,6 +696,7 @@ function setSpeed(value) {
   }
   clearResults();
   clearBenchmarkResults();
+  renderParagraphEditor();
 }
 
 async function loadModel() {
@@ -570,6 +845,7 @@ async function previewSelectedVoice() {
   const controller = new AbortController();
   state.previewController = controller;
   state.isPreviewing = true;
+  updateParagraphEditorControls();
   elements.previewVoiceButton.disabled = true;
   elements.previewVoiceButton.textContent = "Generating preview…";
   try {
@@ -593,6 +869,7 @@ async function previewSelectedVoice() {
   } finally {
     state.isPreviewing = false;
     state.previewController = null;
+    updateParagraphEditorControls();
     elements.previewVoiceButton.textContent = "Preview voice";
     updatePreviewButtonState();
   }
@@ -673,6 +950,136 @@ function addAudioResult({ title, subtitle, filename, blob, kind, index, outputFo
   else elements.audioResults.append(card);
 }
 
+function updateParagraphAudioResult(index, blob, voice, speed, outputFormat) {
+  const paragraphNumber = index + 1;
+  const card = elements.audioResults.querySelector(
+    '.paragraph-audio-card[data-paragraph-index="' + paragraphNumber + '"]'
+  );
+  if (!card) throw new Error("The paragraph audio card is missing. Generate the script again.");
+
+  const player = card.querySelector("audio");
+  const previousUrl = player.src;
+  if (previousUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(previousUrl);
+    state.objectUrls = state.objectUrls.filter(item => item !== previousUrl);
+  }
+  const url = URL.createObjectURL(blob);
+  state.objectUrls.push(url);
+  const download = card.querySelector(".audio-download");
+  const subtitle = card.querySelector(".audio-card-subtitle");
+  player.src = url;
+  download.href = url;
+  download.download = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + outputFormat;
+  if (subtitle) {
+    const excerpt = state.paragraphs[index].text.slice(0, 110);
+    subtitle.textContent = excerpt + (state.paragraphs[index].text.length > 110 ? "…" : "") +
+      " · " + voice + " · " + speed.toFixed(2) + "×";
+  }
+}
+
+async function refreshZipDownload() {
+  if (!state.fullScriptBlob || !state.generatedParagraphBlobs.length) return;
+  const JSZip = await getJSZip();
+  const zip = new JSZip();
+  const extension = state.outputExtension;
+  for (let index = 0; index < state.generatedParagraphBlobs.length; index += 1) {
+    zip.file("paragraph_" + String(index + 1).padStart(3, "0") + "." + extension, state.generatedParagraphBlobs[index]);
+  }
+  zip.file("full_script." + extension, state.fullScriptBlob);
+  const zipBlob = await zip.generateAsync({
+    type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
+  });
+  if (state.zipObjectUrl) {
+    URL.revokeObjectURL(state.zipObjectUrl);
+    state.objectUrls = state.objectUrls.filter(item => item !== state.zipObjectUrl);
+  }
+  const zipUrl = URL.createObjectURL(zipBlob);
+  state.zipObjectUrl = zipUrl;
+  state.objectUrls.push(zipUrl);
+  elements.zipDownload.href = zipUrl;
+  elements.zipDownload.hidden = false;
+}
+
+async function regenerateParagraph(index) {
+  if (state.isGenerating || state.isPreviewing || state.isBenchmarking) return;
+  const paragraph = state.paragraphs[index];
+  if (!paragraph || !state.generatedParagraphBlobs[index] || !state.fullScriptBlob) return;
+
+  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
+  if (pronunciation.errors.length) {
+    setStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before regenerating.", "error");
+    updatePronunciationStatus();
+    return;
+  }
+
+  const voice = paragraph.voice || elements.voiceSelect.value || "af_heart";
+  const speed = Number(paragraph.speed || elements.speedInput.value);
+  if (!state.supportedVoiceIds.has(voice)) {
+    setStatus("Choose a valid English voice for paragraph " + (index + 1) + ".", "error");
+    return;
+  }
+
+  const controller = new AbortController();
+  state.activeAbortController = controller;
+  state.isGenerating = true;
+  elements.cancelButton.hidden = false;
+  elements.cancelButton.disabled = false;
+  elements.generateButton.disabled = true;
+  elements.scriptInput.disabled = true;
+  elements.voiceSelect.disabled = true;
+  elements.voiceFilterSelect.disabled = true;
+  elements.pronunciationRules.disabled = true;
+  elements.speedInput.disabled = true;
+  elements.outputFormat.disabled = true;
+  setParagraphEditorBusy(true);
+  setProgress(15);
+  setStatus("Regenerating paragraph " + (index + 1) + " locally with " + voice + " at " + speed.toFixed(2) + "×…");
+
+  try {
+    const tts = state.tts || await getTTS();
+    const outputFormat = elements.outputFormat.value;
+    if (outputFormat === "mp3") await getLameJS();
+    const spokenText = transformTextForSpeech(paragraph.text, pronunciation.rules);
+    const blob = await generateSelectedSpeechBlob(
+      tts, spokenText, voice, speed, outputFormat, controller.signal
+    );
+    throwIfAborted(controller.signal);
+    state.generatedParagraphBlobs[index] = blob;
+    updateParagraphAudioResult(index, blob, voice, speed, outputFormat);
+    setProgress(85);
+    await refreshZipDownload();
+    setProgress(100);
+    setStatus(
+      "Paragraph " + (index + 1) + " regenerated. Its section file and ZIP bundle are updated; the full-script file keeps the studio-default voice and pace.",
+      "good"
+    );
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === "AbortError") {
+      setStatus("Paragraph regeneration stopped. The previous section audio remains available.", "normal");
+    } else {
+      console.error(error);
+      setProgress(0);
+      setStatus("Could not regenerate paragraph " + (index + 1) + ": " + (error?.message || String(error)), "error");
+    }
+  } finally {
+    state.isGenerating = false;
+    state.activeAbortController = null;
+    elements.cancelButton.hidden = true;
+    elements.cancelButton.disabled = true;
+    elements.scriptInput.disabled = false;
+    elements.voiceSelect.disabled = state.voiceCatalog.length === 0;
+    elements.voiceFilterSelect.disabled = false;
+    elements.pronunciationRules.disabled = false;
+    elements.speedInput.disabled = false;
+    elements.outputFormat.disabled = false;
+    elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
+    elements.loadButton.disabled = Boolean(state.tts);
+    setParagraphEditorBusy(false);
+    updatePreviewButtonState();
+    updateBenchmarkButtonState();
+  }
+}
+
 const BENCHMARK_SCRIPTS = {
   balanced: "Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.",
   creator: "Wait, this is actually impressive! You can turn a rough idea into a finished video in minutes. The best part? You stay in control from the first line to the final export. Let's make something great.",
@@ -745,6 +1152,7 @@ async function runVoiceBenchmark() {
   const controller = new AbortController();
   state.benchmarkAbortController = controller;
   state.isBenchmarking = true;
+  setParagraphEditorBusy(true);
   elements.runBenchmarkButton.disabled = true;
   elements.stopBenchmarkButton.hidden = false;
   elements.stopBenchmarkButton.disabled = false;
@@ -804,6 +1212,7 @@ async function runVoiceBenchmark() {
   } finally {
     state.isBenchmarking = false;
     state.benchmarkAbortController = null;
+    setParagraphEditorBusy(false);
     elements.stopBenchmarkButton.hidden = true;
     elements.stopBenchmarkButton.disabled = true;
     elements.benchmarkPreset.disabled = false;
@@ -821,8 +1230,10 @@ async function runVoiceBenchmark() {
 }
 
 async function generateAudio() {
-  if (state.isBenchmarking || state.isPreviewing) return;
+  if (state.isGenerating || state.isBenchmarking || state.isPreviewing) return;
   const script = elements.scriptInput.value.trim();
+  state.paragraphs = reconcileParagraphs(script, state.paragraphs);
+  persistParagraphSettings();
   const validation = validateParagraphInput(script, MAX_CHARACTERS, MAX_PARAGRAPHS);
   if (!validation.valid) {
     setStatus(validation.message, "error");
@@ -855,11 +1266,15 @@ async function generateAudio() {
   for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
   elements.outputFormat.disabled = true;
   elements.runBenchmarkButton.disabled = true;
+  renderParagraphEditor();
+  setParagraphEditorBusy(true);
   setProgress(1);
 
   const outputBlobs = [];
+  state.generatedParagraphBlobs = outputBlobs;
   const outputFormat = elements.outputFormat.value;
   const extension = outputFormat === "mp3" ? "mp3" : "wav";
+  state.outputExtension = extension;
   const scriptForSpeech = validation.paragraphs.join("\n\n");
   let tts = state.tts;
   try {
@@ -877,21 +1292,35 @@ async function generateAudio() {
       tts, transformTextForSpeech(speechText, pronunciation.rules),
       selectedVoice, speed, outputFormat, controller.signal
     );
-    const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
+    const needsSeparateFullScript = validation.paragraphs.length > 1 ||
+      state.paragraphs.some(paragraph => paragraph.voice || paragraph.speed);
+    const jobCount = validation.paragraphs.length + (needsSeparateFullScript ? 1 : 0);
     let completedJobs = 0;
 
     for (let index = 0; index < validation.paragraphs.length; index += 1) {
       const paragraphNumber = index + 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
-      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + " locally with English Kokoro…");
+      const paragraph = state.paragraphs[index] || { text: validation.paragraphs[index], voice: "", speed: "" };
+      const paragraphVoice = paragraph.voice || selectedVoice;
+      const paragraphSpeed = Number(paragraph.speed || speed);
+      setStatus(
+        "Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length +
+        " with " + paragraphVoice + " at " + paragraphSpeed.toFixed(2) + "×…"
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
-      const audioBlob = await renderSpeech(validation.paragraphs[index]);
+      const spokenText = transformTextForSpeech(validation.paragraphs[index], pronunciation.rules);
+      const audioBlob = await generateSelectedSpeechBlob(
+        tts, spokenText, paragraphVoice, paragraphSpeed, outputFormat, controller.signal
+      );
       throwIfAborted(controller.signal);
       outputBlobs.push(audioBlob);
+      updateParagraphEditorControls();
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + extension;
+      const excerpt = validation.paragraphs[index].slice(0, 110);
       addAudioResult({
         title: "Paragraph " + paragraphNumber,
-        subtitle: validation.paragraphs[index].slice(0, 110) + (validation.paragraphs[index].length > 110 ? "…" : ""),
+        subtitle: excerpt + (validation.paragraphs[index].length > 110 ? "…" : "") +
+          " · " + paragraphVoice + " · " + paragraphSpeed.toFixed(2) + "×",
         filename, blob: audioBlob, kind: "paragraph", index: paragraphNumber, outputFormat
       });
       completedJobs += 1;
@@ -899,7 +1328,7 @@ async function generateAudio() {
     }
 
     let fullScriptBlob;
-    if (outputBlobs.length === 1) {
+    if (outputBlobs.length === 1 && !needsSeparateFullScript) {
       fullScriptBlob = outputBlobs[0];
     } else {
       setStatus("Generating one continuous English voiceover for the complete script…");
@@ -910,27 +1339,17 @@ async function generateAudio() {
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
     const engineSubtitle = "Kokoro English · " + selectedVoice;
+    state.fullScriptBlob = fullScriptBlob;
     addAudioResult({
       title: "Full script voiceover",
-      subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×",
+      subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) +
+        "× · studio defaults",
       filename: "full_script." + extension, blob: fullScriptBlob, kind: "full", outputFormat
     });
 
     setStatus("Packaging the full-script and paragraph " + formatLabel(outputFormat) + " files…");
     setProgress(96);
-    const JSZip = await getJSZip();
-    const zip = new JSZip();
-    for (let index = 0; index < outputBlobs.length; index += 1) {
-      zip.file("paragraph_" + String(index + 1).padStart(3, "0") + "." + extension, outputBlobs[index]);
-    }
-    zip.file("full_script." + extension, fullScriptBlob);
-    const zipBlob = await zip.generateAsync({
-      type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
-    });
-    const zipUrl = URL.createObjectURL(zipBlob);
-    state.objectUrls.push(zipUrl);
-    elements.zipDownload.href = zipUrl;
-    elements.zipDownload.hidden = false;
+    await refreshZipDownload();
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
       "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
@@ -962,12 +1381,14 @@ async function generateAudio() {
     elements.outputFormat.disabled = false;
     elements.loadButton.disabled = Boolean(state.tts);
     elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
+    setParagraphEditorBusy(false);
     updatePreviewButtonState();
     updateBenchmarkButtonState();
   }
 }
 
 elements.scriptInput.addEventListener("input", () => {
+  syncParagraphsFromScript();
   updateScriptCounts();
   saveDraftLocally();
   updateSpokenTextPreview();
@@ -977,9 +1398,13 @@ elements.scriptInput.addEventListener("input", () => {
 elements.voiceSelect.addEventListener("change", () => {
   rememberRecentVoice(elements.voiceSelect.value);
   clearResults();
+  renderParagraphEditor();
   updatePreviewButtonState();
 });
 elements.favoriteVoiceButton.addEventListener("click", toggleFavoriteVoice);
+elements.paragraphEditorList.addEventListener("input", handleParagraphEditorInput);
+elements.paragraphEditorList.addEventListener("change", handleParagraphEditorChange);
+elements.paragraphEditorList.addEventListener("click", handleParagraphEditorAction);
 elements.voiceFilterSelect.addEventListener("change", () => {
   renderVoiceSelector();
   clearResults();
@@ -1027,6 +1452,9 @@ elements.generateButton.addEventListener("click", generateAudio);
 
 elements.clearButton.addEventListener("click", () => {
   elements.scriptInput.value = "";
+  state.paragraphs = [];
+  persistParagraphSettings();
+  renderParagraphEditor();
   saveDraftLocally();
   updateScriptCounts();
   clearResults();
@@ -1038,7 +1466,9 @@ restoreDraftLocally();
 restorePronunciationRules();
 restoreSpokenTextPreference();
 restoreVoicePreferences();
+restoreParagraphSettings();
 updateScriptCounts();
+renderParagraphEditor();
 updateSpokenTextPreview();
 setSpeed(elements.speedInput.value);
 

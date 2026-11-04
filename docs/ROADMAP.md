@@ -33,13 +33,16 @@ This roadmap keeps NextGen AI Voiceover English-first and browser-local. The cur
 - [ ] Add user-rated voice notes and per-use recommendations.
 
 ## Phase 3 — Paragraph-level voiceover editor
-**Status: Planned**
+**Status: In progress**
 
-- [ ] Regenerate one paragraph without rerendering the full script.
-- [ ] Allow per-paragraph voice and speed overrides.
-- [ ] Reorder, split, merge and remove sections.
+- [x] Regenerate one paragraph without rerendering the other section files.
+- [x] Allow per-paragraph English voice and speaking-pace overrides.
+- [x] Reorder, split at the text cursor, and merge sections.
+- [x] Refresh the affected section audio and ZIP bundle after regeneration.
 - [ ] Add adjustable pauses, trimming and silence controls.
 - [ ] Add a synchronized paragraph and audio timeline.
+
+**Current export behavior:** individual paragraph files use their own overrides. The continuous full-script file uses the studio-wide voice and pace, as explained in the editor.
 
 ## Phase 4 — Creator export suite
 **Status: Planned**

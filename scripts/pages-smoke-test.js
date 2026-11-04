@@ -160,6 +160,9 @@ try {
   assert.equal(report.checks.spokenTextPreviewPresent, true, "Prepared spoken-text preview is missing.");
   report.checks.recentVoiceStatusPresent = await page.locator("#recentVoiceHelp").count() === 1;
   assert.equal(report.checks.recentVoiceStatusPresent, true, "Recently used voice indicator is missing.");
+  report.checks.paragraphEditorPresent =
+    await page.locator("#paragraphEditorDetails, #paragraphEditorStatus, #paragraphEditorList").count() === 3;
+  assert.equal(report.checks.paragraphEditorPresent, true, "Paragraph editor controls are missing.");
 
   const voiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
     id: option.value, label: option.textContent.trim(), disabled: option.disabled
@@ -203,11 +206,50 @@ try {
   assert.equal(await page.evaluate(() => localStorage.getItem("nextgen-voiceover-draft-v1")), draftText,
     "The script draft was not saved locally.");
   report.checks.localDraftAutosave = true;
+
+  await page.locator("#paragraphEditorDetails summary").click();
+  assert.equal(await page.locator(".paragraph-editor-card").count(), 2, "Expected two editable paragraph cards.");
+  await page.locator(".paragraph-editor-voice").nth(0).selectOption("af_heart");
+  await page.locator(".paragraph-editor-speed").nth(0).selectOption("1.15");
+  const savedParagraphSettings = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("nextgen-voiceover-paragraph-settings-v1") || "[]")
+  );
+  assert.equal(savedParagraphSettings[0].voice, "af_heart");
+  assert.equal(savedParagraphSettings[0].speed, "1.15");
+
+  await page.locator(".paragraph-action-move-down").first().click();
+  assert.equal(await page.locator("#scriptInput").inputValue(), secondParagraph + "\n\n" + firstParagraph,
+    "Moving a paragraph down did not update the script order.");
+  await page.locator(".paragraph-action-move-up").last().click();
+  assert.equal(await page.locator("#scriptInput").inputValue(), draftText,
+    "Moving a paragraph back up did not restore the script order.");
+
+  const splitCursor = firstParagraph.indexOf("for");
+  await page.locator(".paragraph-editor-text").first().evaluate((textarea, cursor) => {
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+  }, splitCursor);
+  await page.locator(".paragraph-action-split").first().click();
+  assert.equal(await page.locator(".paragraph-editor-card").count(), 3, "Split action did not create another paragraph.");
+  await page.locator(".paragraph-action-merge").first().click();
+  assert.equal(await page.locator(".paragraph-editor-card").count(), 2, "Merge action did not restore the paragraph count.");
+  assert.equal(await page.locator("#scriptInput").inputValue(), draftText,
+    "Split and merge did not preserve paragraph content.");
+  report.checks.paragraphOrderingSplitMerge = true;
+  report.checks.paragraphVoiceAndPaceOverridesSaved = true;
+
   await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForFunction(() => (document.querySelector("#modelBadge")?.textContent || "").includes("Model ready"),
     null, { timeout: 8 * 60 * 1000 });
   assert.equal(await page.locator("#scriptInput").inputValue(), draftText, "The local script draft was not restored after reload.");
   report.checks.localDraftRecovery = true;
+  await page.locator("#paragraphEditorDetails summary").click();
+  assert.equal(await page.locator(".paragraph-editor-card").count(), 2);
+  assert.equal(await page.locator(".paragraph-editor-voice").nth(0).inputValue(), "af_heart",
+    "Paragraph voice override was not restored after reload.");
+  assert.equal(await page.locator(".paragraph-editor-speed").nth(0).inputValue(), "1.15",
+    "Paragraph pace override was not restored after reload.");
+  report.checks.paragraphOverridesRestored = true;
   await page.locator("#voiceSelect").selectOption("am_adam");
   assert.equal(await page.locator("#favoriteVoiceButton").getAttribute("aria-pressed"), "true",
     "Favourite voice was not restored after reload.");
@@ -258,6 +300,9 @@ try {
   }
   report.paragraphWavs = paragraphWavs;
   report.fullScriptWav = fullWav;
+  assert.equal(await page.locator(".paragraph-editor-card").first().locator(".paragraph-editor-voice").inputValue(), "af_heart");
+  assert.match(await page.locator(".paragraph-audio-card").first().locator(".audio-card-subtitle").innerText(), /af_heart/,
+    "Paragraph audio did not use its per-section voice override.");
   assert(fullWav.sizeBytes > 44 && fullWav.validWav, "Full-script output is not a valid WAV.");
   assert(fullWav.sizeBytes > paragraphWavs[0].sizeBytes, "Full-script audio should contain both paragraphs.");
   assert.equal(fullWav.status, 200, "Full-script audio blob could not be read.");
@@ -265,6 +310,21 @@ try {
   assert((await page.locator("#fullScriptDownload").getAttribute("download")).endsWith(".wav"), "WAV selection did not produce a WAV filename.");
   report.checks.paragraphWavOutputs = true;
   report.checks.fullScriptWavOutput = true;
+
+  const zipHrefBeforeRegeneration = await page.locator("#zipDownload").getAttribute("href");
+  await page.locator(".paragraph-action-regenerate").first().click();
+  await page.waitForFunction(() =>
+    (document.querySelector("#statusMessage")?.textContent || "").startsWith("Paragraph 1 regenerated."),
+    null, { timeout: 8 * 60 * 1000 }
+  );
+  const regeneratedParagraph = await inspectAudio(page, ".paragraph-audio-card audio", 0);
+  assert(regeneratedParagraph.validWav && regeneratedParagraph.sizeBytes > 44,
+    "Regenerating a single paragraph did not produce a valid WAV.");
+  assert.notEqual(await page.locator("#zipDownload").getAttribute("href"), zipHrefBeforeRegeneration,
+    "Regenerating a paragraph did not refresh the ZIP bundle.");
+  report.regeneratedParagraphWav = regeneratedParagraph;
+  report.checks.singleParagraphRegeneration = true;
+  report.checks.zipRefreshAfterParagraphRegeneration = true;
 
   const zipCheck = await page.locator("#zipDownload").evaluate(async anchor => {
     const response = await fetch(anchor.href);

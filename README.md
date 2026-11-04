@@ -16,6 +16,8 @@ The app restores the model automatically and enables browser caching. The first 
 - **Smart spoken-text cleanup:** optionally read common dates, years, numbers, numeric ranges, percentages, currencies, measurements, times and common initialisms aloud. Review the prepared spoken text before generating; this changes only the speech input, while the original draft remains intact. Custom pronunciation rules are applied first.
 - **Voice comparison bench:** generate the same short script as a WAV with each of the 28 American and British voices, audition the results, and download individual samples. Includes balanced, creator-style and technical benchmark scripts.
 - **Narration pacing:** speech is streamed paragraph by paragraph, with a longer pause between paragraphs and a shorter pause between streamed chunks.
+- **Paragraph editor:** edit each section independently, reorder sections, split at the text cursor, merge with the next section, and set an optional English voice and speaking pace override.
+- **Section regeneration:** regenerate one paragraph without rerendering the other section files. Its audio file and ZIP bundle are refreshed. Per-paragraph overrides apply to section files; the continuous full-script file uses the studio-wide voice and pace.
 - **Script workflow:** up to 20,000 characters and 100 paragraphs, with each paragraph rendered separately plus one continuous full-script voiceover.
 - **Exports:** WAV or MP3, individual paragraph files, full-script audio and one ZIP bundle.
 - **Draft recovery:** the script and pronunciation rules are saved locally in the current browser profile.

@@ -8,6 +8,7 @@ const requiredFiles = [
   "src/lib/voice-catalog.js",
   "src/lib/pronunciation.js",
   "src/lib/narration.js",
+  "src/lib/paragraph-editor.js",
   "backend/app.py",
   "backend/voice_catalog.py",
   "backend/Dockerfile",
@@ -17,6 +18,7 @@ const requiredFiles = [
   "tests/voice-catalog.test.js",
   "tests/pronunciation.test.js",
   "tests/narration.test.js",
+  "tests/paragraph-editor.test.js",
   "package.json"
 ];
 
@@ -27,6 +29,9 @@ const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
 
 const requiredHtmlMarkers = [
   'id="scriptInput"',
+  'id="paragraphEditorDetails"',
+  'id="paragraphEditorStatus"',
+  'id="paragraphEditorList"',
   'id="voiceFilterSelect"',
   'id="pronunciationRules"',
   'id="pronunciationStatus"',
@@ -128,6 +133,18 @@ if (!main.includes("rate * 0.38") || !main.includes("rate * 0.12")) {
 if (!main.includes("runVoiceBenchmark") || !main.includes("addBenchmarkResult") ||
     !main.includes("addBenchmarkError") || !html.includes('id="voiceBenchmark"')) {
   throw new Error("The cancelable 28-voice English audition benchmark is required.");
+}
+
+if (!main.includes("reconcileParagraphs") || !main.includes("serializeParagraphs") ||
+    !main.includes("moveParagraph") || !main.includes("splitParagraph") ||
+    !main.includes("mergeParagraphWithNext") || !main.includes("regenerateParagraph") ||
+    !main.includes("refreshZipDownload")) {
+  throw new Error("Paragraph editing, ordering, per-section overrides and regeneration are required.");
+}
+if (!main.includes("paragraph.voice || selectedVoice") ||
+    !main.includes("paragraph.speed || speed") ||
+    !main.includes("state.generatedParagraphBlobs[index]")) {
+  throw new Error("Per-paragraph voice and speaking-pace overrides must apply to the section exports.");
 }
 
 
