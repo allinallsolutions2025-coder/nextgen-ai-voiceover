@@ -37,7 +37,7 @@ function isSentencePeriod(line, segmentStart, punctuationIndex, punctuationEnd) 
   const prefix = line.slice(segmentStart, punctuationIndex);
   // Keep dotted initials and abbreviations such as e.g., i.e. and U.S.
   // intact; the token matcher includes dots before the current period.
-  const wordMatch = prefix.match(/([A-Za-z]+(?:\\.[A-Za-z]+)*)$/);
+  const wordMatch = prefix.match(/([A-Za-z]+(?:[.][A-Za-z]+)*)$/);
   const precedingWord = wordMatch?.[1]?.toLowerCase();
   if (precedingWord && ABBREVIATIONS.has(precedingWord)) return false;
   if (precedingWord?.length === 1 && /[A-Z]/.test(next)) return false;
