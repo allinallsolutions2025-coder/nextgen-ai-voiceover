@@ -57,8 +57,6 @@ const state = {
   isPreviewing: false
 };
 
-function setStatus};
-
 function setStatus(message, kind = "normal") {
   elements.statusMessage.textContent = message;
   elements.statusMessage.className = "status" + (kind === "good" ? " status-good" : kind === "error" ? " status-error" : "");
@@ -117,7 +115,7 @@ function updatePreviewButtonState() {
   elements.previewVoiceButton.disabled = !voiceAvailable || state.isGenerating || state.isPreviewing;
 }
 
-function revokeObjectUrls()function revokeObjectUrls() {
+function revokeObjectUrls() {
   for (const url of state.objectUrls) URL.revokeObjectURL(url);
   state.objectUrls = [];
 }
@@ -452,7 +450,7 @@ async function previewSelectedVoice() {
   }
 }
 
-async function createMp3BlobFromSamples(async function createMp3BlobFromSamples(samples, sampleRate) {
+async function createMp3BlobFromSamples(samples, sampleRate) {
   const lame = await getLameJS();
   const encoder = new lame.Mp3Encoder(1, sampleRate, 128);
   const pcm = new Int16Array(samples.length);
@@ -670,7 +668,7 @@ async function generateAudio() {
   }
 }
 
-elements.scriptInput.addEventListenerelements.scriptInput.addEventListener("input", () => {
+elements.scriptInput.addEventListener("input", () => {
   updateScriptCounts();
   saveDraftLocally();
   clearResults();
