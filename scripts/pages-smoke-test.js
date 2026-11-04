@@ -147,6 +147,13 @@ try {
   assert.equal(report.checks.cancelControlPresent, true, "Generation stop control is missing.");
   report.checks.localDraftStatusPresent = await page.locator("#draftStatus").count() === 1;
   assert.equal(report.checks.localDraftStatusPresent, true, "Local draft status is missing.");
+  report.checks.smartSpokenTextControlPresent = await page.locator("#enhanceSpokenText").count() === 1;
+  assert.equal(report.checks.smartSpokenTextControlPresent, true, "Smart spoken-text control is missing.");
+  report.checks.smartSpokenTextEnabledByDefault = await page.locator("#enhanceSpokenText").isChecked();
+  assert.equal(report.checks.smartSpokenTextEnabledByDefault, true, "Smart spoken-text cleanup should be enabled by default.");
+  report.checks.voiceBenchmarkControlsPresent =
+    await page.locator("#benchmarkPreset, #benchmarkScript, #runBenchmarkButton, #benchmarkResults").count() === 4;
+  assert.equal(report.checks.voiceBenchmarkControlsPresent, true, "The 28-voice benchmark controls are missing.");
 
   const voiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
     id: option.value, label: option.textContent.trim(), disabled: option.disabled

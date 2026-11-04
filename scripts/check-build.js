@@ -7,6 +7,7 @@ const requiredFiles = [
   "src/lib/text.js",
   "src/lib/voice-catalog.js",
   "src/lib/pronunciation.js",
+  "src/lib/narration.js",
   "backend/app.py",
   "backend/voice_catalog.py",
   "backend/Dockerfile",
@@ -15,6 +16,7 @@ const requiredFiles = [
   "backend/README.md",
   "tests/voice-catalog.test.js",
   "tests/pronunciation.test.js",
+  "tests/narration.test.js",
   "package.json"
 ];
 
@@ -39,6 +41,11 @@ const requiredHtmlMarkers = [
   'id="previewVoiceButton"',
   'id="voicePreviewAudio"',
   'id="cancelButton"',
+  'id="enhanceSpokenText"',
+  'id="benchmarkPreset"',
+  'id="benchmarkScript"',
+  'id="runBenchmarkButton"',
+  'id="benchmarkResults"',
   'src="./src/main.js"',
   'href="./src/styles.css"'
 ];
@@ -108,12 +115,21 @@ if (html.includes("Performance diagnostics") || html.includes("modelLoadMetric")
 if (!main.includes("validateParagraphInput") ||
     !main.includes("generateSelectedSpeechBlob(") ||
     !main.includes("renderSpeech(scriptForSpeech)") ||
-    !main.includes("applyPronunciationRules(speechText, pronunciation.rules)")) {
-  throw new Error("English paragraph generation, full-script synthesis and pronunciation processing are required.");
+    !main.includes("transformTextForSpeech(speechText, pronunciation.rules)") ||
+    !main.includes("prepareNarrationText") || !main.includes("splitNarrationSections")) {
+  throw new Error("English paragraph generation, smart spoken-text preparation and paragraph-aware synthesis are required.");
 }
 if (!main.includes("tts.stream(") || !main.includes("createWavBlobFromSamples")) {
   throw new Error("Long narration must use streamed audio chunks joined into one WAV.");
 }
+if (!main.includes("rate * 0.38") || !main.includes("rate * 0.12")) {
+  throw new Error("Distinct paragraph and stream-chunk pauses are required.");
+}
+if (!main.includes("runVoiceBenchmark") || !main.includes("addBenchmarkResult") ||
+    !main.includes("addBenchmarkError") || !html.includes('id="voiceBenchmark"')) {
+  throw new Error("The cancelable 28-voice English audition benchmark is required.");
+}
+
 
 console.log("Static application validation passed.");
 console.log("English-only voice catalogue, pronunciation tools, speed presets, paragraph controls and full-script exports verified.");

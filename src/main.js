@@ -2,6 +2,7 @@
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
 import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
+import { prepareNarrationText, splitNarrationSections } from "./lib/narration.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
@@ -22,6 +23,13 @@ const elements = {
   voiceFilterSelect: document.querySelector("#voiceFilterSelect"),
   pronunciationRules: document.querySelector("#pronunciationRules"),
   pronunciationStatus: document.querySelector("#pronunciationStatus"),
+  enhanceSpokenText: document.querySelector("#enhanceSpokenText"),
+  benchmarkPreset: document.querySelector("#benchmarkPreset"),
+  benchmarkScript: document.querySelector("#benchmarkScript"),
+  runBenchmarkButton: document.querySelector("#runBenchmarkButton"),
+  stopBenchmarkButton: document.querySelector("#stopBenchmarkButton"),
+  benchmarkStatus: document.querySelector("#benchmarkStatus"),
+  benchmarkResults: document.querySelector("#benchmarkResults"),
   previewVoiceButton: document.querySelector("#previewVoiceButton"),
   voicePreviewAudio: document.querySelector("#voicePreviewAudio"),
   draftStatus: document.querySelector("#draftStatus"),
@@ -50,11 +58,14 @@ const state = {
   supportedVoiceIds: new Set(),
   voiceCatalog: [],
   objectUrls: [],
+  benchmarkObjectUrls: [],
+  benchmarkAbortController: null,
   previewObjectUrl: null,
   previewController: null,
   activeAbortController: null,
   isGenerating: false,
-  isPreviewing: false
+  isPreviewing: false,
+  isBenchmarking: false
 };
 
 function setStatus(message, kind = "normal") {
@@ -109,10 +120,17 @@ function restoreDraftLocally() {
   }
 }
 
+function updateBenchmarkButtonState() {
+  if (!elements.runBenchmarkButton) return;
+  elements.runBenchmarkButton.disabled = !state.tts || state.voiceCatalog.length !== 28 ||
+    state.isGenerating || state.isPreviewing || state.isBenchmarking;
+}
+
 function updatePreviewButtonState() {
   const voice = elements.voiceSelect.value;
   const voiceAvailable = Boolean(state.tts && voice && state.supportedVoiceIds.has(voice));
-  elements.previewVoiceButton.disabled = !voiceAvailable || state.isGenerating || state.isPreviewing;
+  elements.previewVoiceButton.disabled = !voiceAvailable || state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  updateBenchmarkButtonState();
 }
 
 function revokeObjectUrls() {
@@ -263,6 +281,32 @@ function updatePronunciationStatus() {
   }
 }
 
+function transformTextForSpeech(text, rules = []) {
+  const customPronunciation = applyPronunciationRules(text, rules);
+  return elements.enhanceSpokenText.checked
+    ? prepareNarrationText(customPronunciation)
+    : customPronunciation;
+}
+
+function restoreSpokenTextPreference() {
+  try {
+    const saved = localStorage.getItem("nextgen-voiceover-smart-pronunciation-v1");
+    elements.enhanceSpokenText.checked = saved === null ? true : saved === "true";
+  } catch {
+    elements.enhanceSpokenText.checked = true;
+  }
+}
+
+function saveSpokenTextPreference() {
+  try {
+    localStorage.setItem("nextgen-voiceover-smart-pronunciation-v1", String(elements.enhanceSpokenText.checked));
+  } catch {
+    // Preference still applies for the current tab.
+  }
+  clearResults();
+  clearBenchmarkResults();
+}
+
 function savePronunciationRules() {
   const value = elements.pronunciationRules.value;
   try {
@@ -291,6 +335,7 @@ function setSpeed(value) {
     button.setAttribute("aria-pressed", String(Number(button.dataset.speedPreset) === speed));
   }
   clearResults();
+  clearBenchmarkResults();
 }
 
 async function loadModel() {
@@ -310,7 +355,9 @@ async function loadModel() {
     setBadge("Model ready", "ready");
     setStatus("Your 28 English voices are ready. Choose an American or British voice and preview it before generating.", "good");
     elements.generateButton.disabled = !state.voiceCatalog.length;
+    updateBenchmarkButtonState();
     setProgress(100);
+    updateBenchmarkButtonState();
   } catch (error) {
     console.error(error);
     setBadge("Model load failed", "error");
@@ -357,34 +404,46 @@ async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
     throw new Error("This Kokoro runtime does not support streaming audio generation.");
   }
 
-  const speechChunks = getSpeechChunks(text);
-  if (!speechChunks.length) throw new Error("No speech text was available to generate.");
+  const speechSections = splitNarrationSections(text);
+  if (!speechSections.length) throw new Error("No speech text was available to generate.");
   if (!state.TextSplitterStream) throw new Error("Kokoro's streaming text splitter is unavailable.");
-  const splitter = new state.TextSplitterStream();
-  // Let Kokoro detect punctuation and length boundaries itself. Appending a
-  // newline after every chunk can trigger a TextSplitterStream hang when a
-  // chunk ends with a URL or @mention in Kokoro.js 1.2.1.
-  splitter.push(speechChunks.join(" "));
-  splitter.close();
 
   const waveChunks = [];
   let sampleRate = null;
   let totalSamples = 0;
 
-  for await (const item of tts.stream(splitter, options)) {
+  for (let sectionIndex = 0; sectionIndex < speechSections.length; sectionIndex += 1) {
     throwIfAborted(signal);
-    const raw = item?.audio?.audio;
-    const rate = Number(item?.audio?.sampling_rate);
-    if (!raw || !ArrayBuffer.isView(raw) || !Number.isFinite(rate)) {
-      throw new Error("The streaming voice engine returned an unsupported audio chunk.");
+    const speechChunks = getSpeechChunks(speechSections[sectionIndex]);
+    if (!speechChunks.length) continue;
+    const splitter = new state.TextSplitterStream();
+    // Push the section once without synthetic newline delimiters. Kokoro can
+    // split on its own; a trailing newline can stall around URLs/@mentions.
+    splitter.push(speechChunks.join(" "));
+    splitter.close();
+
+    let sectionChunkCount = 0;
+    for await (const item of tts.stream(splitter, options)) {
+      throwIfAborted(signal);
+      const raw = item?.audio?.audio;
+      const rate = Number(item?.audio?.sampling_rate);
+      if (!raw || !ArrayBuffer.isView(raw) || !Number.isFinite(rate)) {
+        throw new Error("The streaming voice engine returned an unsupported audio chunk.");
+      }
+      if (sampleRate !== null && sampleRate !== rate) {
+        throw new Error("The voice engine changed sample rate during one voiceover.");
+      }
+      sampleRate = rate;
+      const samples = raw instanceof Float32Array ? raw : Float32Array.from(raw);
+      const pauseBefore = waveChunks.length === 0
+        ? 0
+        : sectionChunkCount === 0
+          ? Math.round(rate * 0.38)
+          : Math.round(rate * 0.12);
+      waveChunks.push({ samples, pauseBefore });
+      totalSamples += samples.length;
+      sectionChunkCount += 1;
     }
-    if (sampleRate !== null && sampleRate !== rate) {
-      throw new Error("The voice engine changed sample rate during one voiceover.");
-    }
-    sampleRate = rate;
-    const samples = raw instanceof Float32Array ? raw : Float32Array.from(raw);
-    waveChunks.push(samples);
-    totalSamples += samples.length;
   }
 
   throwIfAborted(signal);
@@ -392,14 +451,13 @@ async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
     throw new Error("The voice engine returned no audio chunks.");
   }
 
-  const pauseSamples = Math.round(sampleRate * 0.09);
-  const totalLength = totalSamples + Math.max(0, waveChunks.length - 1) * pauseSamples;
-  const combined = new Float32Array(totalLength);
+  const totalPauseSamples = waveChunks.reduce((total, chunk) => total + chunk.pauseBefore, 0);
+  const combined = new Float32Array(totalSamples + totalPauseSamples);
   let offset = 0;
-  for (let index = 0; index < waveChunks.length; index += 1) {
-    if (index > 0) offset += pauseSamples;
-    combined.set(waveChunks[index], offset);
-    offset += waveChunks[index].length;
+  for (const chunk of waveChunks) {
+    offset += chunk.pauseBefore;
+    combined.set(chunk.samples, offset);
+    offset += chunk.samples.length;
   }
   if (outputFormat === "mp3") return createMp3BlobFromSamples(combined, sampleRate);
   return createWavBlobFromSamples(combined, sampleRate);
@@ -421,7 +479,7 @@ async function previewSelectedVoice() {
     return;
   }
   const scriptSample = elements.scriptInput.value.trim().slice(0, 160) || PREVIEW_TEXT;
-  const sample = applyPronunciationRules(scriptSample, pronunciation.rules);
+  const sample = transformTextForSpeech(scriptSample, pronunciation.rules);
   const controller = new AbortController();
   state.previewController = controller;
   state.isPreviewing = true;
@@ -528,7 +586,155 @@ function addAudioResult({ title, subtitle, filename, blob, kind, index, outputFo
   else elements.audioResults.append(card);
 }
 
+const BENCHMARK_SCRIPTS = {
+  balanced: "Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.",
+  creator: "Wait, this is actually impressive! You can turn a rough idea into a finished video in minutes. The best part? You stay in control from the first line to the final export. Let's make something great.",
+  technical: "The API processes 1,250 requests per second, uses 2.5 gigabytes of memory, and keeps average latency below 120 milliseconds. Visit example.com for the documentation, or send your questions to support@example.com."
+};
+
+function setBenchmarkStatus(message, kind = "normal") {
+  elements.benchmarkStatus.textContent = message;
+  elements.benchmarkStatus.className = "benchmark-status" + (kind === "error" ? " status-error" : kind === "good" ? " status-good" : "");
+}
+
+function clearBenchmarkResults() {
+  for (const url of state.benchmarkObjectUrls) URL.revokeObjectURL(url);
+  state.benchmarkObjectUrls = [];
+  elements.benchmarkResults.replaceChildren();
+}
+
+function addBenchmarkResult(voice, blob) {
+  const url = URL.createObjectURL(blob);
+  state.benchmarkObjectUrls.push(url);
+  const card = document.createElement("article");
+  card.className = "benchmark-card";
+  card.dataset.voiceId = voice.id;
+
+  const title = document.createElement("strong");
+  title.textContent = voice.name + " · " + voice.id;
+  const description = document.createElement("small");
+  description.textContent = voice.languageLabel + " · " + voice.gender;
+  const player = document.createElement("audio");
+  player.controls = true;
+  player.preload = "none";
+  player.src = url;
+  player.setAttribute("aria-label", "Benchmark preview for " + voice.name);
+  const download = document.createElement("a");
+  download.href = url;
+  download.download = "voice-benchmark-" + voice.id + ".wav";
+  download.textContent = "Download WAV";
+  card.append(title, description, player, download);
+  elements.benchmarkResults.append(card);
+}
+
+function addBenchmarkError(voice, error) {
+  const card = document.createElement("article");
+  card.className = "benchmark-card benchmark-card-error";
+  card.dataset.voiceId = voice.id;
+  const title = document.createElement("strong");
+  title.textContent = voice.name + " · " + voice.id;
+  const description = document.createElement("small");
+  description.textContent = voice.languageLabel + " · " + voice.gender + " · generation failed";
+  const detail = document.createElement("small");
+  detail.textContent = error?.message || "This voice could not be generated.";
+  card.append(title, description, detail);
+  elements.benchmarkResults.append(card);
+}
+
+async function runVoiceBenchmark() {
+  if (state.isGenerating || state.isPreviewing || state.isBenchmarking) return;
+  const rawText = elements.benchmarkScript.value.trim();
+  if (!rawText || rawText.length > 1200) {
+    setBenchmarkStatus("Enter a benchmark script between 1 and 1,200 characters.", "error");
+    return;
+  }
+  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
+  if (pronunciation.errors.length) {
+    setBenchmarkStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before benchmarking.", "error");
+    return;
+  }
+
+  clearBenchmarkResults();
+  const controller = new AbortController();
+  state.benchmarkAbortController = controller;
+  state.isBenchmarking = true;
+  elements.runBenchmarkButton.disabled = true;
+  elements.stopBenchmarkButton.hidden = false;
+  elements.stopBenchmarkButton.disabled = false;
+  elements.benchmarkPreset.disabled = true;
+  elements.benchmarkScript.disabled = true;
+  elements.previewVoiceButton.disabled = true;
+  elements.generateButton.disabled = true;
+  elements.voiceSelect.disabled = true;
+  elements.voiceFilterSelect.disabled = true;
+  elements.speedInput.disabled = true;
+  elements.pronunciationRules.disabled = true;
+  elements.enhanceSpokenText.disabled = true;
+  for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
+
+  try {
+    const tts = state.tts || await getTTS();
+    if (!state.voiceCatalog.length) populateVoiceSelector(tts);
+    const script = transformTextForSpeech(rawText, pronunciation.rules);
+    const speed = Number(elements.speedInput.value);
+    const total = state.voiceCatalog.length;
+    const failedVoices = [];
+
+    for (let index = 0; index < total; index += 1) {
+      throwIfAborted(controller.signal);
+      const voice = state.voiceCatalog[index];
+      setBenchmarkStatus("Generating voice " + (index + 1) + " of " + total + ": " + voice.name + " (" + voice.languageLabel + ")…");
+      try {
+        const blob = await generateSelectedSpeechBlob(tts, script, voice.id, speed, "wav", controller.signal);
+        throwIfAborted(controller.signal);
+        addBenchmarkResult(voice, blob);
+      } catch (error) {
+        if (controller.signal.aborted || error?.name === "AbortError") throw error;
+        failedVoices.push(voice.id);
+        addBenchmarkError(voice, error);
+      }
+      setProgress(((index + 1) / total) * 100);
+    }
+
+    if (controller.signal.aborted) {
+      setBenchmarkStatus("Comparison stopped. Completed voice previews remain available.", "normal");
+    } else if (failedVoices.length) {
+      setBenchmarkStatus(
+        "Comparison finished: " + (total - failedVoices.length) + " of " + total +
+        " voices generated. Failed voices: " + failedVoices.join(", ") + ". You can retry.",
+        "error"
+      );
+    } else {
+      setBenchmarkStatus("All " + total + " English voices are ready. Play the same sample in each card to compare them.", "good");
+    }
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === "AbortError") {
+      setBenchmarkStatus("Comparison stopped. Completed voice previews remain available.", "normal");
+    } else {
+      console.error(error);
+      setBenchmarkStatus("Comparison failed: " + (error?.message || String(error)), "error");
+    }
+  } finally {
+    state.isBenchmarking = false;
+    state.benchmarkAbortController = null;
+    elements.stopBenchmarkButton.hidden = true;
+    elements.stopBenchmarkButton.disabled = true;
+    elements.benchmarkPreset.disabled = false;
+    elements.benchmarkScript.disabled = false;
+    elements.voiceSelect.disabled = state.voiceCatalog.length === 0;
+    elements.voiceFilterSelect.disabled = false;
+    elements.speedInput.disabled = false;
+    elements.pronunciationRules.disabled = false;
+    elements.enhanceSpokenText.disabled = false;
+    for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = false;
+    elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
+    updatePreviewButtonState();
+    updateBenchmarkButtonState();
+  }
+}
+
 async function generateAudio() {
+  if (state.isBenchmarking || state.isPreviewing) return;
   const script = elements.scriptInput.value.trim();
   const validation = validateParagraphInput(script, MAX_CHARACTERS, MAX_PARAGRAPHS);
   if (!validation.valid) {
@@ -560,6 +766,7 @@ async function generateAudio() {
   elements.speedInput.disabled = true;
   for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
   elements.outputFormat.disabled = true;
+  elements.runBenchmarkButton.disabled = true;
   setProgress(1);
 
   const outputBlobs = [];
@@ -579,7 +786,7 @@ async function generateAudio() {
       await getLameJS();
     }
     const renderSpeech = (speechText) => generateSelectedSpeechBlob(
-      tts, applyPronunciationRules(speechText, pronunciation.rules),
+      tts, transformTextForSpeech(speechText, pronunciation.rules),
       selectedVoice, speed, outputFormat, controller.signal
     );
     const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
@@ -668,6 +875,7 @@ async function generateAudio() {
     elements.loadButton.disabled = Boolean(state.tts);
     elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
     updatePreviewButtonState();
+    updateBenchmarkButtonState();
   }
 }
 
@@ -688,6 +896,21 @@ elements.voiceFilterSelect.addEventListener("change", () => {
 elements.pronunciationRules.addEventListener("input", () => {
   savePronunciationRules();
   clearResults();
+  clearBenchmarkResults();
+});
+elements.enhanceSpokenText.addEventListener("change", saveSpokenTextPreference);
+elements.benchmarkPreset.addEventListener("change", () => {
+  elements.benchmarkScript.value = BENCHMARK_SCRIPTS[elements.benchmarkPreset.value] || BENCHMARK_SCRIPTS.balanced;
+  clearBenchmarkResults();
+  setBenchmarkStatus("Preset loaded. Generate the comparison to audition all 28 voices.");
+});
+elements.benchmarkScript.addEventListener("input", clearBenchmarkResults);
+elements.runBenchmarkButton.addEventListener("click", runVoiceBenchmark);
+elements.stopBenchmarkButton.addEventListener("click", () => {
+  if (!state.benchmarkAbortController) return;
+  state.benchmarkAbortController.abort();
+  elements.stopBenchmarkButton.disabled = true;
+  setBenchmarkStatus("Stopping after the current voice finishes…");
 });
 elements.previewVoiceButton.addEventListener("click", previewSelectedVoice);
 elements.cancelButton.addEventListener("click", () => {
@@ -718,11 +941,13 @@ elements.clearButton.addEventListener("click", () => {
 
 restoreDraftLocally();
 restorePronunciationRules();
+restoreSpokenTextPreference();
 updateScriptCounts();
 setSpeed(elements.speedInput.value);
 
 window.addEventListener("beforeunload", () => {
   revokeObjectUrls();
+  clearBenchmarkResults();
   if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
 });
 

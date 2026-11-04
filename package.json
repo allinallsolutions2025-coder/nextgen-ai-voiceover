@@ -5,7 +5,7 @@
   "type": "module",
   "description": "English-first browser-based Kokoro voiceover studio for NextGen AI Voiceover",
   "scripts": {
-    "check": "node --check src/main.js && node --check src/lib/text.js && node --check src/lib/pronunciation.js && node --check src/lib/voice-catalog.js && node --check scripts/check-build.js && node --check scripts/build-site.js && node --check scripts/pages-smoke-test.js",
+    "check": "node --check src/main.js && node --check src/lib/text.js && node --check src/lib/pronunciation.js && node --check src/lib/voice-catalog.js && node --check src/lib/narration.js && node --check scripts/check-build.js && node --check scripts/build-site.js && node --check scripts/pages-smoke-test.js",
     "test": "node --test tests/*.test.js",
     "build": "node scripts/build-site.js"
   },
