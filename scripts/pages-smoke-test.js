@@ -343,7 +343,7 @@ try {
   assert.equal(report.checks.voiceAssetsResolved, true, "Expected successful CDN responses for all 28 voice assets.");
 
   // Pronunciation guidance is saved locally and applied to English speech.
-  const pronunciationRules = "OpenAI = Open A I\\nYouTube = You Tube\\nSQL = sequel";
+  const pronunciationRules = ["OpenAI = Open A I", "YouTube = You Tube", "SQL = sequel"].join(String.fromCharCode(10));
   await page.locator("#pronunciationRules").fill(pronunciationRules);
   assert.equal(await page.evaluate(() => localStorage.getItem("nextgen-voiceover-pronunciation-v1")), pronunciationRules,
     "Pronunciation rules were not saved locally.");
