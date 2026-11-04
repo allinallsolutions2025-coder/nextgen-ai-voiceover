@@ -84,6 +84,7 @@ const state = {
   paragraphs: [],
   generatedParagraphBlobs: [],
   fullScriptBlob: null,
+  zipObjectUrl: null,
   outputExtension: "wav"
 };
 
@@ -472,6 +473,7 @@ function clearResults() {
   revokeObjectUrls();
   state.generatedParagraphBlobs = [];
   state.fullScriptBlob = null;
+  state.zipObjectUrl = null;
   elements.audioResults.replaceChildren();
   elements.zipDownload.hidden = true;
   elements.zipDownload.removeAttribute("href");
@@ -838,6 +840,7 @@ async function previewSelectedVoice() {
   const controller = new AbortController();
   state.previewController = controller;
   state.isPreviewing = true;
+  updateParagraphEditorControls();
   elements.previewVoiceButton.disabled = true;
   elements.previewVoiceButton.textContent = "Generating preview…";
   try {
@@ -861,6 +864,7 @@ async function previewSelectedVoice() {
   } finally {
     state.isPreviewing = false;
     state.previewController = null;
+    updateParagraphEditorControls();
     elements.previewVoiceButton.textContent = "Preview voice";
     updatePreviewButtonState();
   }
@@ -948,9 +952,14 @@ function updateParagraphAudioResult(index, blob, voice, speed, outputFormat) {
   );
   if (!card) throw new Error("The paragraph audio card is missing. Generate the script again.");
 
+  const player = card.querySelector("audio");
+  const previousUrl = player.src;
+  if (previousUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(previousUrl);
+    state.objectUrls = state.objectUrls.filter(item => item !== previousUrl);
+  }
   const url = URL.createObjectURL(blob);
   state.objectUrls.push(url);
-  const player = card.querySelector("audio");
   const download = card.querySelector(".audio-download");
   const subtitle = card.querySelector(".audio-card-subtitle");
   player.src = url;
@@ -975,7 +984,12 @@ async function refreshZipDownload() {
   const zipBlob = await zip.generateAsync({
     type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
   });
+  if (state.zipObjectUrl) {
+    URL.revokeObjectURL(state.zipObjectUrl);
+    state.objectUrls = state.objectUrls.filter(item => item !== state.zipObjectUrl);
+  }
   const zipUrl = URL.createObjectURL(zipBlob);
+  state.zipObjectUrl = zipUrl;
   state.objectUrls.push(zipUrl);
   elements.zipDownload.href = zipUrl;
   elements.zipDownload.hidden = false;
@@ -1133,6 +1147,7 @@ async function runVoiceBenchmark() {
   const controller = new AbortController();
   state.benchmarkAbortController = controller;
   state.isBenchmarking = true;
+  setParagraphEditorBusy(true);
   elements.runBenchmarkButton.disabled = true;
   elements.stopBenchmarkButton.hidden = false;
   elements.stopBenchmarkButton.disabled = false;
@@ -1192,6 +1207,7 @@ async function runVoiceBenchmark() {
   } finally {
     state.isBenchmarking = false;
     state.benchmarkAbortController = null;
+    setParagraphEditorBusy(false);
     elements.stopBenchmarkButton.hidden = true;
     elements.stopBenchmarkButton.disabled = true;
     elements.benchmarkPreset.disabled = false;
