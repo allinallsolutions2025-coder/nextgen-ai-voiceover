@@ -70,6 +70,11 @@
             <label class="sr-only" for="scriptInput">Voiceover script</label>
             <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Start writing your voiceover here...&#10;&#10;Separate paragraphs with a blank line. Each paragraph can be generated as its own WAV, and the complete script can be rendered as one voiceover."></textarea>
 
+            <details class="spoken-preview" id="spokenPreview">
+              <summary>Review prepared spoken text <span>Preview automatic pronunciation changes</span></summary>
+              <pre id="spokenPreviewText" aria-live="polite">Your prepared spoken script will appear here.</pre>
+            </details>
+
             <div class="editor-footer">
               <span id="paragraphCount">0 paragraphs</span>
               <span class="footer-divider">·</span>
@@ -149,8 +154,9 @@
                 <option value="british">British English</option>
                 <option value="female">Female voices</option>
                 <option value="male">Male voices</option>
+                <option value="favorites">Favorite voices</option>
               </select>
-              <small>Filter by accent or voice type to compare the English catalogue.</small>
+              <small>Filter by accent, voice type or your saved favourites.</small>
             </div>
 
             <div class="field">
@@ -159,10 +165,12 @@
                 <option value="">Voice list loads automatically…</option>
               </select>
               <small id="voiceHelp">28 American and British English voices · generated locally in your browser.</small>
+              <small id="recentVoiceHelp" class="recent-voice-help">Recently used: none yet.</small>
             </div>
 
             <div class="voice-preview-row shared-voice-preview">
               <button id="previewVoiceButton" class="button button-secondary preview-voice-button" type="button" disabled>Preview voice</button>
+              <button id="favoriteVoiceButton" class="button button-secondary favorite-voice-button" type="button" aria-pressed="false" disabled>☆ Save voice</button>
               <audio id="voicePreviewAudio" class="voice-preview-audio" controls preload="none" hidden aria-label="Selected voice preview"></audio>
             </div>
 
