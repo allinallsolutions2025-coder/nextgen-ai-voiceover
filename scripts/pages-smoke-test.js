@@ -154,6 +154,10 @@ try {
   report.checks.voiceBenchmarkControlsPresent =
     await page.locator("#benchmarkPreset, #benchmarkScript, #runBenchmarkButton, #benchmarkResults").count() === 4;
   assert.equal(report.checks.voiceBenchmarkControlsPresent, true, "The 28-voice benchmark controls are missing.");
+  report.checks.favoriteVoiceControlPresent = await page.locator("#favoriteVoiceButton").count() === 1;
+  assert.equal(report.checks.favoriteVoiceControlPresent, true, "Voice favourite control is missing.");
+  report.checks.spokenTextPreviewPresent = await page.locator("#spokenPreviewText").count() === 1;
+  assert.equal(report.checks.spokenTextPreviewPresent, true, "Prepared spoken-text preview is missing.");
 
   const voiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
     id: option.value, label: option.textContent.trim(), disabled: option.disabled
@@ -180,8 +184,15 @@ try {
 
   // Two paragraphs verify the individual WAVs and one continuous full-script WAV.
   await page.locator("#voiceSelect").selectOption("am_adam");
+  await page.locator("#favoriteVoiceButton").click();
+  assert.equal(await page.locator("#favoriteVoiceButton").getAttribute("aria-pressed"), "true");
+  assert.deepEqual(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("nextgen-voiceover-favorite-voices-v1") || "[]")),
+    ["am_adam"],
+    "Favourite voice was not saved locally."
+  );
   const firstParagraph = "This is the first short paragraph for the voiceover export test.";
-  const secondParagraph = "This is the second paragraph. The full script should also be generated as one continuous voiceover.";
+  const secondParagraph = "This is the second paragraph. The full script should also be generated in 2026 as one continuous voiceover.";
   const draftText = firstParagraph + "\n\n" + secondParagraph;
   await page.locator("#scriptInput").fill(draftText);
   report.scriptParagraphCharacterCounts = [firstParagraph.length, secondParagraph.length];
@@ -194,6 +205,16 @@ try {
     null, { timeout: 8 * 60 * 1000 });
   assert.equal(await page.locator("#scriptInput").inputValue(), draftText, "The local script draft was not restored after reload.");
   report.checks.localDraftRecovery = true;
+  assert.equal(await page.locator("#favoriteVoiceButton").getAttribute("aria-pressed"), "true",
+    "Favourite voice was not restored after reload.");
+  await page.locator("#voiceFilterSelect").selectOption("favorites");
+  assert.equal(await page.locator("#voiceSelect option").count(), 1, "Favourite voice filter should show the saved voice.");
+  assert.equal(await page.locator("#voiceSelect").inputValue(), "am_adam");
+  await page.locator("#voiceFilterSelect").selectOption("all");
+  const spokenPreview = await page.locator("#spokenPreviewText").innerText();
+  assert.match(spokenPreview, /twenty twenty six/, "Prepared spoken-text preview did not reflect the narration cleanup.");
+  report.checks.favoriteVoicePersistenceAndFilter = true;
+  report.checks.spokenTextPreviewReflectsTransform = true;
   await page.locator("#voiceSelect").selectOption("am_adam");
   await page.locator("#previewVoiceButton").click();
   await page.waitForFunction(() => {
@@ -321,6 +342,10 @@ try {
   assert.equal(Number(await page.locator("#speedInput").inputValue()).toFixed(2), "1.00");
   report.checks.speakingPacePresets = true;
 
+  // The preceding MP3 test intentionally changed the output format. Restore
+  // WAV before verifying representative English voice outputs.
+  await page.locator("#outputFormat").selectOption("wav");
+
   // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];
   for (const voice of representativeVoices) {
@@ -329,8 +354,8 @@ try {
     await page.locator("#generateButton").click();
     await waitForGeneration(page);
     const wav = await inspectAudio(page, "#fullScriptAudio audio");
-    assert(wav.sizeBytes > 44 && wav.validWav, voice + " did not produce a valid full-script WAV.");
     report.voiceTests.push({ voice, wav });
+    assert(wav.sizeBytes > 44 && wav.validWav, voice + " did not produce a valid full-script WAV.");
   }
   report.voiceTests.push({ voice: "am_adam", wav: paragraphWavs[0] });
   report.checks.representativeVoicesGenerated = report.voiceTests.length === representativeVoices.length + 1;
