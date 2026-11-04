@@ -213,7 +213,7 @@ function normalizeOrdinals(text) {
 }
 
 function normalizeBareNumbers(text) {
-  return text.replace(/(?<![\p{L}\p{N}_+#(.\-\/])((?:\d{1,3}(?:,\d{3})+|\d{1,6})(?:\.\d+)?)(?![\p{L}\p{N}_\.\/:-])/gu, (whole, number) => {
+  return text.replace(/(?<![\p{L}\p{N}_+#(.\-\/])((?:\d{1,3}(?:,\d{3})+|\d{1,6})(?:\.\d+)?)(?![\p{L}\p{N}_\/:-]|\.\d)/gu, (whole, number) => {
     if (/^0\d/.test(number.replace(/,/g, ""))) return whole;
     const plain = number.replace(/,/g, "");
     if (/^(?:19|20)\d{2}$/.test(plain)) return yearToWords(plain);
