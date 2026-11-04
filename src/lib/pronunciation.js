@@ -3,7 +3,10 @@ function escapeRegex(value) {
 }
 
 function preserveCase(match, replacement) {
-  if (match.toLocaleUpperCase("en-US") === match) return replacement.toLocaleUpperCase("en-US");
+  const letters = match.match(/\\p{L}/gu) || [];
+  if (letters.length > 1 && letters.every((letter) => letter.toLocaleUpperCase("en-US") === letter)) {
+    return replacement.toLocaleUpperCase("en-US");
+  }
   if (match[0] === match[0].toLocaleUpperCase("en-US")) {
     return replacement[0].toLocaleUpperCase("en-US") + replacement.slice(1);
   }
