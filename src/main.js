@@ -1496,7 +1496,9 @@ async function generateAudio() {
       formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×" +
       (state.subtitleSrtBlob && state.subtitleVttBlob ? " · SRT + VTT captions ready" : "");
     setProgress(100);
-    setStatus("English voiceover complete. Preview the audio, download SRT/VTT captions, or export the complete creator project ZIP.", "good");
+    setStatus("English voiceover complete. Preview the audio, " +
+      (state.subtitleSrtBlob && state.subtitleVttBlob ? "download SRT/VTT captions, " : "") +
+      "or export the complete creator project ZIP.", "good");
   } catch (error) {
     if (controller.signal.aborted || error?.name === "AbortError") {
       setStatus("Generation stopped. Completed paragraph audio remains available below.", "normal");
