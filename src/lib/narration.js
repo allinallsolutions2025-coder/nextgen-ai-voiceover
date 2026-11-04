@@ -198,7 +198,7 @@ function normalizePercentages(text) {
 
 function normalizeMeasurements(text) {
   const aliases = Object.keys(UNITS).sort((a, b) => b.length - a.length)
-    .map(unit => unit.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&"));
+    .map(unit => unit.replace(/[|\\{}()[\]^$+*?.-]/g, "\\$&"));
   const pattern = new RegExp("\\b(\\d+(?:\\.\\d+)?)\\s*(" + aliases.join("|") + ")(?![A-Za-z])", "gi");
   return text.replace(pattern, (whole, rawNumber, rawUnit) => {
     const unit = UNITS[rawUnit.toLowerCase()];
@@ -213,7 +213,7 @@ function normalizeOrdinals(text) {
 }
 
 function normalizeBareNumbers(text) {
-  return text.replace(/(?<![\p{L}\p{N}_+#(./-])((?:\d{1,3}(?:,\d{3})+|\d{1,6})(?:\.\d+)?)(?![\p{L}\p{N}_/.:-])/gu, (whole, number) => {
+  return text.replace(/(?<![\p{L}\p{N}_+#(.\-\/])((?:\d{1,3}(?:,\d{3})+|\d{1,6})(?:\.\d+)?)(?![\p{L}\p{N}_\.\/:-])/gu, (whole, number) => {
     if (/^0\d/.test(number.replace(/,/g, ""))) return whole;
     const plain = number.replace(/,/g, "");
     if (/^(?:19|20)\d{2}$/.test(plain)) return yearToWords(plain);
