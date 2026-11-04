@@ -627,6 +627,20 @@ function addBenchmarkResult(voice, blob) {
   elements.benchmarkResults.append(card);
 }
 
+function addBenchmarkError(voice, error) {
+  const card = document.createElement("article");
+  card.className = "benchmark-card benchmark-card-error";
+  card.dataset.voiceId = voice.id;
+  const title = document.createElement("strong");
+  title.textContent = voice.name + " · " + voice.id;
+  const description = document.createElement("small");
+  description.textContent = voice.languageLabel + " · " + voice.gender + " · generation failed";
+  const detail = document.createElement("small");
+  detail.textContent = error?.message || "This voice could not be generated.";
+  card.append(title, description, detail);
+  elements.benchmarkResults.append(card);
+}
+
 async function runVoiceBenchmark() {
   if (state.isGenerating || state.isPreviewing || state.isBenchmarking) return;
   const rawText = elements.benchmarkScript.value.trim();
@@ -664,19 +678,32 @@ async function runVoiceBenchmark() {
     const script = transformTextForSpeech(rawText, pronunciation.rules);
     const speed = Number(elements.speedInput.value);
     const total = state.voiceCatalog.length;
+    const failedVoices = [];
 
     for (let index = 0; index < total; index += 1) {
       throwIfAborted(controller.signal);
       const voice = state.voiceCatalog[index];
       setBenchmarkStatus("Generating voice " + (index + 1) + " of " + total + ": " + voice.name + " (" + voice.languageLabel + ")…");
-      const blob = await generateSelectedSpeechBlob(tts, script, voice.id, speed, "wav", controller.signal);
-      throwIfAborted(controller.signal);
-      addBenchmarkResult(voice, blob);
+      try {
+        const blob = await generateSelectedSpeechBlob(tts, script, voice.id, speed, "wav", controller.signal);
+        throwIfAborted(controller.signal);
+        addBenchmarkResult(voice, blob);
+      } catch (error) {
+        if (controller.signal.aborted || error?.name === "AbortError") throw error;
+        failedVoices.push(voice.id);
+        addBenchmarkError(voice, error);
+      }
       setProgress(((index + 1) / total) * 100);
     }
 
     if (controller.signal.aborted) {
       setBenchmarkStatus("Comparison stopped. Completed voice previews remain available.", "normal");
+    } else if (failedVoices.length) {
+      setBenchmarkStatus(
+        "Comparison finished: " + (total - failedVoices.length) + " of " + total +
+        " voices generated. Failed voices: " + failedVoices.join(", ") + ". You can retry.",
+        "error"
+      );
     } else {
       setBenchmarkStatus("All " + total + " English voices are ready. Play the same sample in each card to compare them.", "good");
     }
