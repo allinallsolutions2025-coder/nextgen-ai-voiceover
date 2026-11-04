@@ -203,7 +203,7 @@ try {
     return previewButton &&
       !previewButton.disabled &&
       previewButton.textContent.trim() === "Preview voice" &&
-      status.startsWith("Voice preview ready:");
+      status.startsWith("English voice preview ready:");
   }, null, { timeout: 30000 });
   report.checks.previewFinishedBeforeGenerate = true;
   const generateButton = page.locator("#generateButton");
