@@ -289,6 +289,8 @@ try {
   // Test the independent Supertonic 3 browser engine; it does not add to the Kokoro list.
   assert.equal(await page.locator("#speechEngineSelect option").count(), 2, "Expected separate Kokoro and Supertonic engine choices.");
   await page.locator("#speechEngineSelect").selectOption("supertonic");
+  // The preceding Kokoro check switches to MP3; explicitly select WAV for these model tests.
+  await page.locator("#outputFormat").selectOption("wav");
   assert.equal(await page.locator("#supertonicEngineControls").isVisible(), true);
   assert.equal(await page.locator("#kokoroEngineControls").isVisible(), false);
   const languageOptions = await page.locator("#supertonicLanguageSelect option").count();
