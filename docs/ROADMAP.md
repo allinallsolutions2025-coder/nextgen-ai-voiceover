@@ -45,12 +45,14 @@ This roadmap keeps NextGen AI Voiceover English-first and browser-local. The cur
 **Current export behavior:** individual paragraph files use their own overrides. The continuous full-script file uses the studio-wide voice and pace, as explained in the editor.
 
 ## Phase 4 — Creator export suite
-**Status: Planned**
+**Status: In progress**
 
-- [ ] Export SRT and VTT subtitle files with timing derived from generated audio.
-- [ ] Add creator presets for Shorts, long-form videos, podcasts and narration.
-- [ ] Add optional loudness normalization and silence trimming.
-- [ ] Package audio, captions, original script and spoken script into a project ZIP.
+- [x] Export SRT and VTT caption files with cue durations estimated against the measured full-script audio runtime.
+- [x] Add caption-layout and project metadata presets for Shorts / Reels, long-form videos, podcasts and narration.
+- [x] Add optional RMS-based level matching with a peak ceiling, plus leading/trailing silence trimming.
+- [x] Package paragraph and full-script audio, captions, original script, prepared spoken script and project metadata into one ZIP.
+
+**Export notes:** subtitle timestamps are phrase-weighted estimates based on the actual audio duration, not word-level forced alignment; review them in a video editor before publishing. Audio level matching targets approximately −18 dBFS RMS with a −1 dBFS peak ceiling; it is not certified EBU R128 / LUFS mastering. Creator presets configure caption layout and package metadata; they do not render video.
 
 ## Phase 5 — Projects and offline workflow
 **Status: Planned**
