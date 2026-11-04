@@ -295,7 +295,7 @@ function setSpeed(value) {
   clearResults();
 }
 
-async function getLameJS() {async function loadModel() {
+async function loadModel() {
   if (state.tts) {
     setBadge("Model ready", "ready");
     elements.loadButton.textContent = "Model ready";
