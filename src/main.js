@@ -1,17 +1,12 @@
-// Keep the Pages smoke test aligned with the currently deployed studio UI.
-// Browser-local English synthesis plus an optional connected multilingual Kokoro API.
+// English-first browser-local voiceover studio.
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
+import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
 import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
-const ONNXRUNTIME_CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.min.js";
-const ONNXRUNTIME_WASM_BASE = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/";
-const SUPERTONIC_MODEL_BASE = "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46";
-const SUPERTONIC_ONNX_BASE = SUPERTONIC_MODEL_BASE + "/onnx";
-const SUPERTONIC_STYLE_BASE = SUPERTONIC_MODEL_BASE + "/voice_styles";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
@@ -22,16 +17,11 @@ const elements = {
   scriptInput: document.querySelector("#scriptInput"),
   characterCount: document.querySelector("#characterCount"),
   paragraphCount: document.querySelector("#paragraphCount"),
-  speechEngineSelect: document.querySelector("#speechEngineSelect"),
-  kokoroEngineControls: document.querySelector("#kokoroEngineControls"),
-  supertonicEngineControls: document.querySelector("#supertonicEngineControls"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceHelp: document.querySelector("#voiceHelp"),
-  supertonicLanguageSelect: document.querySelector("#supertonicLanguageSelect"),
-  supertonicVoiceStyleSelect: document.querySelector("#supertonicVoiceStyleSelect"),
-  acceptSupertonicLicense: document.querySelector("#acceptSupertonicLicense"),
-  loadSupertonicButton: document.querySelector("#loadSupertonicButton"),
-  supertonicModelStatus: document.querySelector("#supertonicModelStatus"),
+  voiceFilterSelect: document.querySelector("#voiceFilterSelect"),
+  pronunciationRules: document.querySelector("#pronunciationRules"),
+  pronunciationStatus: document.querySelector("#pronunciationStatus"),
   previewVoiceButton: document.querySelector("#previewVoiceButton"),
   voicePreviewAudio: document.querySelector("#voicePreviewAudio"),
   draftStatus: document.querySelector("#draftStatus"),
@@ -49,7 +39,6 @@ const elements = {
   resultsSummary: document.querySelector("#resultsSummary"),
   audioResults: document.querySelector("#audioResults"),
   zipDownload: document.querySelector("#zipDownload"),
-  engineLabel: document.querySelector("#engineLabel")
 };
 
 const state = {
@@ -59,14 +48,7 @@ const state = {
   jsZipPromise: null,
   lamePromise: null,
   supportedVoiceIds: new Set(),
-  supertonicTts: null,
-  supertonicHelpers: null,
-  supertonicLoadPromise: null,
-  supertonicStylePromises: new Map(),
-  supertonicStyles: new Map(),
-  supertonicStyle: null,
-  supertonicStyleName: "",
-  onnxRuntimePromise: null,
+  voiceCatalog: [],
   objectUrls: [],
   previewObjectUrl: null,
   previewController: null,
@@ -74,6 +56,8 @@ const state = {
   isGenerating: false,
   isPreviewing: false
 };
+
+function setStatus};
 
 function setStatus(message, kind = "normal") {
   elements.statusMessage.textContent = message;
@@ -128,15 +112,12 @@ function restoreDraftLocally() {
 }
 
 function updatePreviewButtonState() {
-  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
   const voice = elements.voiceSelect.value;
-  const voiceAvailable = supertonicSelected
-    ? Boolean(state.supertonicTts && elements.supertonicLanguageSelect.value && elements.scriptInput.value.trim())
-    : Boolean(voice) && state.supportedVoiceIds.has(voice);
+  const voiceAvailable = Boolean(state.tts && voice && state.supportedVoiceIds.has(voice));
   elements.previewVoiceButton.disabled = !voiceAvailable || state.isGenerating || state.isPreviewing;
 }
 
-function revokeObjectUrls() {
+function revokeObjectUrls()function revokeObjectUrls() {
   for (const url of state.objectUrls) URL.revokeObjectURL(url);
   state.objectUrls = [];
 }
@@ -222,168 +203,99 @@ async function getJSZip() {
   return state.jsZipPromise;
 }
 
-function populateVoiceSelector(tts = null) {
+function renderVoiceSelector() {
   const previousSelection = elements.voiceSelect.value;
-  const browserVoices = normalizeVoiceCatalog(tts?.voices ?? []);
-  const completeCatalog = getCompleteVoiceCatalog(tts?.voices ?? []);
-  state.supportedVoiceIds = new Set(browserVoices.map((voice) => voice.id));
-  const unavailableVoices = completeCatalog.filter((voice) => !state.supportedVoiceIds.has(voice.id));
+  const filter = elements.voiceFilterSelect.value;
+  const filteredVoices = state.voiceCatalog.filter((voice) => {
+    if (filter === "american") return voice.language === "en-us";
+    if (filter === "british") return voice.language === "en-gb";
+    if (filter === "female" || filter === "male") return voice.gender.toLowerCase() === filter;
+    return true;
+  });
 
   elements.voiceSelect.replaceChildren();
   const groups = new Map();
-  for (const voice of browserVoices) {
+  for (const voice of filteredVoices) {
     if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
     groups.get(voice.languageLabel).push(voice);
   }
   for (const [languageLabel, groupVoices] of groups) {
     const group = document.createElement("optgroup");
-    group.label = languageLabel + " — Kokoro · browser WASM";
+    group.label = languageLabel;
     for (const voice of groupVoices) {
       const option = document.createElement("option");
       option.value = voice.id;
-      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ")";
+      option.textContent = voice.name + " · " + voice.gender;
       group.append(option);
     }
     elements.voiceSelect.append(group);
   }
-  const preserved = [...elements.voiceSelect.options].find((option) => option.value === previousSelection);
-  const preferred = browserVoices.some((voice) => voice.id === "af_heart") ? "af_heart" : (browserVoices[0]?.id || "");
-  elements.voiceSelect.value = preserved?.value || preferred;
-  elements.voiceSelect.disabled = browserVoices.length === 0;
-  elements.voiceHelp.textContent =
-    browserVoices.length + " English Kokoro voices · American and British English only. The 26 non-English Kokoro entries have been removed; use Supertonic 3 for separate local multilingual speech.";
+  if (!filteredVoices.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.disabled = true;
+    option.textContent = "No voices match this filter";
+    elements.voiceSelect.append(option);
+  }
+
+  const preserved = filteredVoices.find((voice) => voice.id === previousSelection);
+  const preferred = filteredVoices.find((voice) => voice.id === "af_heart")?.id || filteredVoices[0]?.id || "";
+  elements.voiceSelect.value = preserved?.id || preferred;
+  elements.voiceSelect.disabled = filteredVoices.length === 0;
+  elements.voiceHelp.textContent = filteredVoices.length + " of 28 English voices shown · American and British accents · generated locally.";
   updatePreviewButtonState();
 }
 
-let onnxRuntimeScriptPromise = null;
-
-async function getOnnxRuntime() {
-  if (globalThis.ort?.InferenceSession && globalThis.ort?.Tensor) return globalThis.ort;
-  if (!onnxRuntimeScriptPromise) {
-    onnxRuntimeScriptPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = ONNXRUNTIME_CDN;
-      script.async = true;
-      script.crossOrigin = "anonymous";
-      script.onload = () => {
-        const ort = globalThis.ort;
-        if (ort?.InferenceSession && ort?.Tensor) resolve(ort);
-        else reject(new Error("ONNX Runtime Web loaded without exposing its browser API."));
-      };
-      script.onerror = () => reject(new Error("Could not load ONNX Runtime Web from jsDelivr."));
-      document.head.appendChild(script);
-    }).catch((error) => {
-      onnxRuntimeScriptPromise = null;
-      throw error;
-    });
-  }
-  return onnxRuntimeScriptPromise;
+function populateVoiceSelector(tts = null) {
+  state.voiceCatalog = normalizeVoiceCatalog(tts?.voices ?? []);
+  state.supportedVoiceIds = new Set(state.voiceCatalog.map((voice) => voice.id));
+  renderVoiceSelector();
 }
 
-async function loadSupertonicHelpers() {
-  if (state.supertonicHelpers) return state.supertonicHelpers;
-  const ort = await getOnnxRuntime();
-  ort.env.wasm.wasmPaths = ONNXRUNTIME_WASM_BASE;
-  ort.env.wasm.numThreads = 1;
-  state.supertonicHelpers = await import("./lib/supertonic.js");
-  return state.supertonicHelpers;
-}
-
-async function loadSupertonicVoiceStyle(styleName = elements.supertonicVoiceStyleSelect.value) {
-  if (!state.supertonicTts) throw new Error("Load Supertonic 3 before choosing a voice style.");
-  const name = String(styleName || "M1").toUpperCase();
-  if (!/^[MF][1-5]$/.test(name)) throw new Error("Choose one of the ten Supertonic preset styles.");
-  if (state.supertonicStyles.has(name)) {
-    state.supertonicStyle = state.supertonicStyles.get(name);
-    state.supertonicStyleName = name;
-    return state.supertonicStyle;
-  }
-  if (state.supertonicStylePromises.has(name)) return state.supertonicStylePromises.get(name);
-  const promise = (async () => {
-    const { loadVoiceStyle } = await loadSupertonicHelpers();
-    const style = await loadVoiceStyle([SUPERTONIC_STYLE_BASE + "/" + name + ".json"], true);
-    state.supertonicStyles.set(name, style);
-    state.supertonicStyle = style;
-    state.supertonicStyleName = name;
-    return style;
-  })().finally(() => state.supertonicStylePromises.delete(name));
-  state.supertonicStylePromises.set(name, promise);
-  return promise;
-}
-
-async function loadSupertonicModel() {
-  if (!elements.acceptSupertonicLicense.checked) {
-    elements.supertonicModelStatus.textContent = "Please confirm the OpenRAIL-M usage restrictions before loading this model.";
-    setStatus("Supertonic 3 requires acknowledgement of its model-use restrictions.", "error");
-    return;
-  }
-  if (state.supertonicTts) {
-    elements.supertonicModelStatus.textContent = "Ready · Supertonic 3 is already loaded on this device.";
-    return state.supertonicTts;
-  }
-  if (state.supertonicLoadPromise) return state.supertonicLoadPromise;
-  elements.loadSupertonicButton.disabled = true;
-  elements.loadSupertonicButton.textContent = "Loading Supertonic 3…";
-  elements.supertonicModelStatus.textContent =
-    "Downloading about 398 MB of ONNX weights from Hugging Face, then initializing them locally. This is a first-use download.";
-  setStatus("Loading Supertonic 3 multilingual model in your browser. No speech server is used…");
-  state.supertonicLoadPromise = (async () => {
-    const { loadTextToSpeech } = await loadSupertonicHelpers();
-    const result = await loadTextToSpeech(SUPERTONIC_ONNX_BASE, {
-      executionProviders: ["wasm"],
-      graphOptimizationLevel: "all"
-    }, (modelName, current, total) => {
-      elements.supertonicModelStatus.textContent =
-        "Loading ONNX model " + current + " of " + total + ": " + modelName + ". Downloads run directly in this browser.";
-      setStatus("Loading Supertonic 3 · " + current + "/" + total + " · " + modelName + "…");
-    });
-    state.supertonicTts = result.textToSpeech;
-    await loadSupertonicVoiceStyle(elements.supertonicVoiceStyleSelect.value || "M1");
-    return result.textToSpeech;
-  })().then((tts) => {
-    elements.loadSupertonicButton.textContent = "Supertonic 3 loaded";
-    elements.supertonicModelStatus.textContent =
-      "Ready · 31 languages · 10 preset voice styles · ONNX WASM on this device. Your script stays in this browser.";
-    elements.engineLabel.textContent = "Supertonic 3 · on-device";
-    elements.speechEngineSelect.value = "supertonic";
-    setSpeechEngine();
-    setStatus("Supertonic 3 is ready. Choose a language and preset voice style to generate speech locally.", "good");
-    return tts;
-  }).catch((error) => {
-    state.supertonicLoadPromise = null;
-    state.supertonicTts = null;
-    state.supertonicStyles.clear();
-    state.supertonicStyle = null;
-    state.supertonicStyleName = "";
-    elements.loadSupertonicButton.disabled = false;
-    elements.loadSupertonicButton.textContent = "Retry Supertonic model load";
-    elements.supertonicModelStatus.textContent = "Could not load Supertonic 3: " + (error?.message || String(error));
-    setStatus("Supertonic 3 could not initialize: " + (error?.message || String(error)), "error");
-    throw error;
-  }).finally(() => {
-    elements.loadSupertonicButton.disabled = Boolean(state.supertonicTts);
-  });
-  return state.supertonicLoadPromise;
-}
-
-function setSpeechEngine() {
-  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
-  elements.kokoroEngineControls.hidden = supertonicSelected;
-  elements.supertonicEngineControls.hidden = !supertonicSelected;
-  elements.loadButton.hidden = supertonicSelected;
-  elements.voiceSelect.disabled = supertonicSelected || !state.tts;
-  if (supertonicSelected) {
-    elements.engineLabel.textContent = state.supertonicTts ? "Supertonic 3 · on-device" : "Supertonic 3 · not loaded";
-    elements.generateButton.disabled = !state.supertonicTts;
-    if (!state.supertonicTts) setStatus("Load the Supertonic 3 model to enable 31-language local speech.");
+function updatePronunciationStatus() {
+  const parsed = parsePronunciationRules(elements.pronunciationRules.value);
+  if (parsed.errors.length) {
+    elements.pronunciationStatus.textContent = "Fix line(s): " + parsed.errors.join(", ");
+    elements.pronunciationStatus.classList.add("pronunciation-status-error");
   } else {
-    elements.engineLabel.textContent = "Kokoro · English · local";
-    elements.generateButton.disabled = !state.tts;
+    elements.pronunciationStatus.textContent = parsed.rules.length
+      ? parsed.rules.length + " pronunciation rule(s) active · saved in this browser"
+      : "No custom pronunciation rules";
+    elements.pronunciationStatus.classList.remove("pronunciation-status-error");
   }
-  updatePreviewButtonState();
 }
 
-async function loadModel() {
+function savePronunciationRules() {
+  const value = elements.pronunciationRules.value;
+  try {
+    if (value) localStorage.setItem("nextgen-voiceover-pronunciation-v1", value);
+    else localStorage.removeItem("nextgen-voiceover-pronunciation-v1");
+  } catch {
+    // The feature still works for this session if local storage is unavailable.
+  }
+  updatePronunciationStatus();
+}
+
+function restorePronunciationRules() {
+  try {
+    elements.pronunciationRules.value = localStorage.getItem("nextgen-voiceover-pronunciation-v1") || "";
+  } catch {
+    elements.pronunciationRules.value = "";
+  }
+  updatePronunciationStatus();
+}
+
+function setSpeed(value) {
+  const speed = Math.max(0.5, Math.min(2, Number(value) || 1));
+  elements.speedInput.value = speed.toFixed(2);
+  elements.speedValue.textContent = speed.toFixed(2) + "×";
+  for (const button of document.querySelectorAll("[data-speed-preset]")) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.speedPreset) === speed));
+  }
+  clearResults();
+}
+
+async function getLameJS() {async function loadModel() {
   if (state.tts) {
     setBadge("Model ready", "ready");
     elements.loadButton.textContent = "Model ready";
@@ -398,8 +310,8 @@ async function loadModel() {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus("The 28 English Kokoro voices are ready locally. Choose Supertonic 3 for separate on-device multilingual speech.", "good");
-    elements.generateButton.disabled = false;
+    setStatus("Your 28 English voices are ready. Choose an American or British voice and preview it before generating.", "good");
+    elements.generateButton.disabled = !state.voiceCatalog.length;
     setProgress(100);
   } catch (error) {
     console.error(error);
@@ -498,63 +410,34 @@ async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat,
   return generateSpeechBlob(tts, text, { voice, speed }, outputFormat, signal);
 }
 
-async function generateSupertonicSpeechBlob(text, language, styleName, speed, outputFormat, signal) {
-  if (!state.supertonicTts) throw new Error("Load Supertonic 3 before generating multilingual speech.");
-  const style = await loadSupertonicVoiceStyle(styleName);
-  throwIfAborted(signal);
-  const result = await state.supertonicTts.call(
-    text, language, style, 8, speed, 0.3,
-    (step, total) => {
-      throwIfAborted(signal);
-      setStatus("Supertonic 3 · denoising step " + step + " of " + total + " · " + language.toUpperCase() + "…");
-    }
-  );
-  throwIfAborted(signal);
-  const sampleRate = Number(state.supertonicTts.sampleRate);
-  const duration = Number(result.duration?.[0] || 0);
-  const sampleCount = Math.max(0, Math.floor(sampleRate * duration));
-  const samples = Float32Array.from((result.wav || []).slice(0, sampleCount));
-  if (!samples.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
-    throw new Error("Supertonic 3 returned an empty or invalid audio result.");
-  }
-  if (outputFormat === "mp3") return createMp3BlobFromSamples(samples, sampleRate);
-  return createWavBlobFromSamples(samples, sampleRate);
-}
-
 async function previewSelectedVoice() {
   if (state.isGenerating || state.isPreviewing) return;
-  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
-  const sample = elements.scriptInput.value.trim().slice(0, 160);
-  if (supertonicSelected && !sample) {
-    setStatus("Enter a short sample in the selected language before previewing a Supertonic style.", "error");
+  const selectedVoice = elements.voiceSelect.value;
+  if (!selectedVoice || !state.supportedVoiceIds.has(selectedVoice)) return;
+  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
+  if (pronunciation.errors.length) {
+    setStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before previewing.", "error");
     return;
   }
-  const voice = supertonicSelected ? elements.supertonicVoiceStyleSelect.value : elements.voiceSelect.value;
-  if (!voice) return;
+  const scriptSample = elements.scriptInput.value.trim().slice(0, 160) || PREVIEW_TEXT;
+  const sample = applyPronunciationRules(scriptSample, pronunciation.rules);
   const controller = new AbortController();
   state.previewController = controller;
   state.isPreviewing = true;
   elements.previewVoiceButton.disabled = true;
   elements.previewVoiceButton.textContent = "Generating preview…";
   try {
-    const tts = supertonicSelected ? null : (state.tts || await getTTS());
-    const blob = supertonicSelected
-      ? await generateSupertonicSpeechBlob(sample, elements.supertonicLanguageSelect.value, voice,
-        Number(elements.speedInput.value), "wav", controller.signal)
-      : await generateSelectedSpeechBlob(tts, PREVIEW_TEXT, voice,
-        Number(elements.speedInput.value), "wav", controller.signal);
+    const tts = state.tts || await getTTS();
+    const blob = await generateSelectedSpeechBlob(
+      tts, sample, selectedVoice, Number(elements.speedInput.value), "wav", controller.signal
+    );
     throwIfAborted(controller.signal);
     if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
     state.previewObjectUrl = URL.createObjectURL(blob);
     elements.voicePreviewAudio.src = state.previewObjectUrl;
     elements.voicePreviewAudio.hidden = false;
     try { await elements.voicePreviewAudio.play(); } catch {}
-    setStatus(
-      supertonicSelected
-        ? "Supertonic preview ready: " + voice + " · " + elements.supertonicLanguageSelect.value.toUpperCase() + "."
-        : "Voice preview ready: " + voice + ". Try another voice to compare.",
-      "good"
-    );
+    setStatus("English voice preview ready: " + selectedVoice + ". Try another accent or voice to compare.", "good");
   } catch (error) {
     if (error?.name === "AbortError") setStatus("Voice preview stopped.", "normal");
     else {
@@ -569,7 +452,7 @@ async function previewSelectedVoice() {
   }
 }
 
-async function createMp3BlobFromSamples(samples, sampleRate) {
+async function createMp3BlobFromSamples(async function createMp3BlobFromSamples(samples, sampleRate) {
   const lame = await getLameJS();
   const encoder = new lame.Mp3Encoder(1, sampleRate, 128);
   const pcm = new Int16Array(samples.length);
@@ -651,16 +534,16 @@ async function generateAudio() {
     setStatus(validation.message, "error");
     return;
   }
-  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
-  const selectedVoice = supertonicSelected ? elements.supertonicVoiceStyleSelect.value : (elements.voiceSelect.value || "af_heart");
-  const speed = Number(elements.speedInput.value);
-  const language = elements.supertonicLanguageSelect.value;
-  if (supertonicSelected && !state.supertonicTts) {
-    setStatus("Load Supertonic 3 before generating multilingual speech.", "error");
+  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
+  if (pronunciation.errors.length) {
+    setStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before generating.", "error");
+    updatePronunciationStatus();
     return;
   }
-
+  const selectedVoice = elements.voiceSelect.value || "af_heart";
+  const speed = Number(elements.speedInput.value);
   clearResults();
+
   const controller = new AbortController();
   state.activeAbortController = controller;
   state.isGenerating = true;
@@ -669,13 +552,12 @@ async function generateAudio() {
   elements.previewVoiceButton.disabled = true;
   elements.generateButton.disabled = true;
   elements.loadButton.disabled = true;
-  elements.speechEngineSelect.disabled = true;
   elements.scriptInput.disabled = true;
   elements.voiceSelect.disabled = true;
-  elements.supertonicLanguageSelect.disabled = true;
-  elements.supertonicVoiceStyleSelect.disabled = true;
-  elements.loadSupertonicButton.disabled = true;
+  elements.voiceFilterSelect.disabled = true;
+  elements.pronunciationRules.disabled = true;
   elements.speedInput.disabled = true;
+  for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
   elements.outputFormat.disabled = true;
   setProgress(1);
 
@@ -685,31 +567,27 @@ async function generateAudio() {
   const scriptForSpeech = validation.paragraphs.join("\n\n");
   let tts = state.tts;
   try {
-    if (supertonicSelected) {
-      await loadSupertonicVoiceStyle(selectedVoice);
-    } else {
-      tts = tts || await getTTS();
-      if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
-      setBadge("Model ready", "ready");
-      if (!state.supportedVoiceIds.has(selectedVoice)) {
-        throw new Error("Kokoro voice " + selectedVoice + " is not in the 28 supported English voices.");
-      }
+    tts = tts || await getTTS();
+    if (!state.voiceCatalog.length) populateVoiceSelector(tts);
+    setBadge("Model ready", "ready");
+    if (!state.supportedVoiceIds.has(selectedVoice)) {
+      throw new Error("Choose one of the 28 available American or British English voices.");
     }
     if (outputFormat === "mp3") {
       setStatus("Preparing the MP3 encoder…");
       await getLameJS();
     }
-    const renderSpeech = (speechText) => supertonicSelected
-      ? generateSupertonicSpeechBlob(speechText, language, selectedVoice, speed, outputFormat, controller.signal)
-      : generateSelectedSpeechBlob(tts, speechText, selectedVoice, speed, outputFormat, controller.signal);
+    const renderSpeech = (speechText) => generateSelectedSpeechBlob(
+      tts, applyPronunciationRules(speechText, pronunciation.rules),
+      selectedVoice, speed, outputFormat, controller.signal
+    );
     const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
     let completedJobs = 0;
 
     for (let index = 0; index < validation.paragraphs.length; index += 1) {
       const paragraphNumber = index + 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
-      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length +
-        (supertonicSelected ? " locally with Supertonic 3 · " + language.toUpperCase() + "…" : " locally with Kokoro…"));
+      setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length + " locally with English Kokoro…");
       await new Promise((resolve) => setTimeout(resolve, 0));
       const audioBlob = await renderSpeech(validation.paragraphs[index]);
       throwIfAborted(controller.signal);
@@ -728,16 +606,14 @@ async function generateAudio() {
     if (outputBlobs.length === 1) {
       fullScriptBlob = outputBlobs[0];
     } else {
-      setStatus("Generating one continuous voiceover for the complete script…");
+      setStatus("Generating one continuous English voiceover for the complete script…");
       await new Promise((resolve) => setTimeout(resolve, 0));
       fullScriptBlob = await renderSpeech(scriptForSpeech);
       throwIfAborted(controller.signal);
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
-    const engineSubtitle = supertonicSelected
-      ? "Supertonic 3 · " + selectedVoice + " · " + language.toUpperCase()
-      : "Kokoro · " + selectedVoice;
+    const engineSubtitle = "Kokoro English · " + selectedVoice;
     addAudioResult({
       title: "Full script voiceover",
       subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×",
@@ -764,7 +640,7 @@ async function generateAudio() {
       "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
       formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×";
     setProgress(100);
-    setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete " +
+    setStatus("English voiceover complete. Preview or download the full script, individual paragraphs, or the complete " +
       formatLabel(outputFormat) + " bundle.", "good");
   } catch (error) {
     if (controller.signal.aborted || error?.name === "AbortError") {
@@ -781,26 +657,37 @@ async function generateAudio() {
     state.activeAbortController = null;
     elements.cancelButton.hidden = true;
     elements.cancelButton.disabled = true;
-    elements.speechEngineSelect.disabled = false;
     elements.scriptInput.disabled = false;
+    elements.voiceSelect.disabled = state.voiceCatalog.length === 0;
+    elements.voiceFilterSelect.disabled = false;
+    elements.pronunciationRules.disabled = false;
     elements.speedInput.disabled = false;
+    for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = false;
     elements.outputFormat.disabled = false;
-    elements.supertonicLanguageSelect.disabled = false;
-    elements.supertonicVoiceStyleSelect.disabled = false;
-    elements.loadSupertonicButton.disabled = Boolean(state.supertonicTts);
     elements.loadButton.disabled = Boolean(state.tts);
-    setSpeechEngine();
+    elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
     updatePreviewButtonState();
   }
 }
 
-elements.scriptInput.addEventListener("input", () => {
+elements.scriptInput.addEventListenerelements.scriptInput.addEventListener("input", () => {
   updateScriptCounts();
   saveDraftLocally();
   clearResults();
 });
 
-elements.voiceSelect.addEventListener("change", updatePreviewButtonState);
+elements.voiceSelect.addEventListener("change", () => {
+  clearResults();
+  updatePreviewButtonState();
+});
+elements.voiceFilterSelect.addEventListener("change", () => {
+  renderVoiceSelector();
+  clearResults();
+});
+elements.pronunciationRules.addEventListener("input", () => {
+  savePronunciationRules();
+  clearResults();
+});
 elements.previewVoiceButton.addEventListener("click", previewSelectedVoice);
 elements.cancelButton.addEventListener("click", () => {
   if (!state.activeAbortController) return;
@@ -811,32 +698,12 @@ elements.cancelButton.addEventListener("click", () => {
 
 elements.outputFormat.addEventListener("change", () => clearResults());
 
-elements.speedInput.addEventListener("input", () => {
-  elements.speedValue.textContent = Number(elements.speedInput.value).toFixed(2) + "×";
-});
+elements.speedInput.addEventListener("input", () => setSpeed(elements.speedInput.value));
+for (const button of document.querySelectorAll("[data-speed-preset]")) {
+  button.addEventListener("click", () => setSpeed(button.dataset.speedPreset));
+}
 
 elements.loadButton.addEventListener("click", loadModel);
-elements.loadSupertonicButton.addEventListener("click", () => void loadSupertonicModel().catch(console.error));
-elements.speechEngineSelect.addEventListener("change", setSpeechEngine);
-elements.supertonicVoiceStyleSelect.addEventListener("change", async () => {
-  if (!state.supertonicTts) {
-    updatePreviewButtonState();
-    return;
-  }
-  elements.previewVoiceButton.disabled = true;
-  elements.supertonicModelStatus.textContent = "Loading preset voice style " + elements.supertonicVoiceStyleSelect.value + "…";
-  try {
-    await loadSupertonicVoiceStyle(elements.supertonicVoiceStyleSelect.value);
-    elements.supertonicModelStatus.textContent =
-      "Ready · Supertonic 3 · " + elements.supertonicVoiceStyleSelect.value + " · 31 languages · local ONNX WASM.";
-    setStatus("Supertonic voice style ready: " + elements.supertonicVoiceStyleSelect.value + ".", "good");
-  } catch (error) {
-    console.error(error);
-    setStatus("Could not load this Supertonic preset: " + (error?.message || String(error)), "error");
-  } finally {
-    updatePreviewButtonState();
-  }
-});
 elements.generateButton.addEventListener("click", generateAudio);
 
 elements.clearButton.addEventListener("click", () => {
@@ -849,8 +716,9 @@ elements.clearButton.addEventListener("click", () => {
 });
 
 restoreDraftLocally();
+restorePronunciationRules();
 updateScriptCounts();
-setSpeechEngine();
+setSpeed(elements.speedInput.value);
 
 window.addEventListener("beforeunload", () => {
   revokeObjectUrls();
