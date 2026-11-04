@@ -46,10 +46,13 @@ async function waitForGeneration(page) {
   }, null, { timeout: 120000 });
   await page.waitForFunction(() => {
     const status = document.querySelector("#statusMessage")?.textContent || "";
-    return status.startsWith("Voiceover complete.") || status.startsWith("Generation failed:");
+    return status.startsWith("English voiceover complete.") ||
+      status.startsWith("Voiceover complete.") ||
+      status.startsWith("Generation failed:");
   }, null, { timeout: 8 * 60 * 1000 });
   const status = (await page.locator("#statusMessage").innerText()).trim();
-  assert(status.startsWith("Voiceover complete."), "Speech generation failed: " + status);
+  const completed = status.startsWith("English voiceover complete.") || status.startsWith("Voiceover complete.");
+  assert(completed, "Speech generation failed: " + status);
 }
 
 async function inspectAudio(page, selector, index = null) {
