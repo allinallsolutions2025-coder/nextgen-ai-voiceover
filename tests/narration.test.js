@@ -49,6 +49,13 @@ test("splits text into paragraph sections without losing content", () => {
   );
 });
 
+test("does not partially rewrite Indian-style comma grouping or invalid dates", () => {
+  assert.equal(prepareNarrationText("The reference is 1,00,000 and the date is February 30, 2026."),
+    "The reference is 1,00,000 and the date is February 30, 2026.");
+  assert.equal(prepareNarrationText("The balance is ₹1,00,000."),
+    "The balance is one hundred thousand rupees.");
+});
+
 test("leaves ordinary words and empty strings unchanged", () => {
   assert.equal(prepareNarrationText("Hello there."), "Hello there.");
   assert.equal(prepareNarrationText(""), "");
