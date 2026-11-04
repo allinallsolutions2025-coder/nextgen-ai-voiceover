@@ -1,9 +1,13 @@
 import { getParagraphs } from "./text.js";
 
 let nextParagraphId = 1;
+const usedParagraphIds = new Set();
 
 function createId() {
-  return "paragraph-" + nextParagraphId++;
+  let candidate = "paragraph-" + nextParagraphId++;
+  while (usedParagraphIds.has(candidate)) candidate = "paragraph-" + nextParagraphId++;
+  usedParagraphIds.add(candidate);
+  return candidate;
 }
 
 function normalizeParagraphRecord(record, text) {
@@ -15,12 +19,9 @@ function normalizeParagraphRecord(record, text) {
     : Number.isFinite(Number(record.speed)) && Number(record.speed) >= 0.5 && Number(record.speed) <= 2
       ? Number(record.speed).toFixed(2)
       : "";
-  return {
-    id: typeof record?.id === "string" && record.id ? record.id : createId(),
-    text,
-    voice,
-    speed
-  };
+  const id = typeof record?.id === "string" && record.id ? record.id : createId();
+  usedParagraphIds.add(id);
+  return { id, text, voice, speed };
 }
 
 /**
