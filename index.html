@@ -103,30 +103,89 @@
             </div>
 
             <div class="field">
-              <label for="voiceSelect">Voice</label>
-              <select id="voiceSelect" disabled>
-                <option value="">Voice list loads automatically…</option>
+              <label for="speechEngineSelect">Speech engine</label>
+              <select id="speechEngineSelect">
+                <option value="kokoro" selected>Kokoro · 28 English voices</option>
+                <option value="supertonic">Supertonic 3 · 31 languages</option>
               </select>
-              <div class="voice-preview-row">
-                <button id="previewVoiceButton" class="button button-secondary preview-voice-button" type="button" disabled>Preview voice</button>
-                <audio id="voicePreviewAudio" class="voice-preview-audio" controls preload="none" hidden aria-label="Selected voice preview"></audio>
+              <small>These are separate models. Supertonic's ten preset styles do not add or rename Kokoro voices.</small>
+            </div>
+
+            <div id="kokoroEngineControls">
+              <div class="field">
+                <label for="voiceSelect">Kokoro voice</label>
+                <select id="voiceSelect" disabled>
+                  <option value="">Voice list loads automatically…</option>
+                </select>
+                <small id="voiceHelp">28 American and British English Kokoro voices · generated locally in your browser.</small>
               </div>
-              <small id="voiceHelp">28 English voices run in your browser. Load the multilingual model to unlock 26 more voices across seven additional languages.</small>
             </div>
 
-            <div class="field multilingual-local-field">
-              <label>More voices · run on this device</label>
-              <button id="loadMultilingualButton" class="button button-secondary multilingual-load-button" type="button">Load 26 additional voices locally</button>
-              <small id="multilingualModelStatus" role="status">Optional first-time download: approximately 295 MB. The stable browser engine runs locally after loading; no speech server or API key is needed. Model: <a href="https://huggingface.co/litert-community/Kokoro-82M" target="_blank" rel="noopener noreferrer">Kokoro-82M · Apache 2.0</a>.</small>
+            <div id="supertonicEngineControls" hidden>
+              <div class="field">
+                <label for="supertonicLanguageSelect">Language · 31 supported</label>
+                <select id="supertonicLanguageSelect">
+                  <option value="en" selected>English</option>
+                  <option value="ko">Korean</option>
+                  <option value="ja">Japanese</option>
+                  <option value="ar">Arabic</option>
+                  <option value="bg">Bulgarian</option>
+                  <option value="cs">Czech</option>
+                  <option value="da">Danish</option>
+                  <option value="de">German</option>
+                  <option value="el">Greek</option>
+                  <option value="es">Spanish</option>
+                  <option value="et">Estonian</option>
+                  <option value="fi">Finnish</option>
+                  <option value="fr">French</option>
+                  <option value="hi">Hindi</option>
+                  <option value="hr">Croatian</option>
+                  <option value="hu">Hungarian</option>
+                  <option value="id">Indonesian</option>
+                  <option value="it">Italian</option>
+                  <option value="lt">Lithuanian</option>
+                  <option value="lv">Latvian</option>
+                  <option value="nl">Dutch</option>
+                  <option value="pl">Polish</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="ro">Romanian</option>
+                  <option value="ru">Russian</option>
+                  <option value="sk">Slovak</option>
+                  <option value="sl">Slovenian</option>
+                  <option value="sv">Swedish</option>
+                  <option value="tr">Turkish</option>
+                  <option value="uk">Ukrainian</option>
+                  <option value="vi">Vietnamese</option>
+                  <option value="na">Auto / language-agnostic</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="supertonicVoiceStyleSelect">Preset voice style · 10 available</label>
+                <select id="supertonicVoiceStyleSelect">
+                  <option value="M1" selected>Male 1 (M1)</option>
+                  <option value="M2">Male 2 (M2)</option>
+                  <option value="M3">Male 3 (M3)</option>
+                  <option value="M4">Male 4 (M4)</option>
+                  <option value="M5">Male 5 (M5)</option>
+                  <option value="F1">Female 1 (F1)</option>
+                  <option value="F2">Female 2 (F2)</option>
+                  <option value="F3">Female 3 (F3)</option>
+                  <option value="F4">Female 4 (F4)</option>
+                  <option value="F5">Female 5 (F5)</option>
+                </select>
+              </div>
+              <label class="license-consent">
+                <input id="acceptSupertonicLicense" type="checkbox">
+                <span>I have read the OpenRAIL-M model license and agree to follow its use restrictions.</span>
+              </label>
+              <button id="loadSupertonicButton" class="button button-secondary supertonic-load-button" type="button">Load Supertonic 3 locally · about 398 MB</button>
+              <small id="supertonicModelStatus" role="status">First-use download: about 398 MB of ONNX weights, then the selected preset style. Speech is generated on this device; no speech server is used.</small>
+              <small>Ten preset styles · no voice cloning. Hindi is supported; Tamil, Telugu, Kannada and Malayalam are not in this model. <a href="https://huggingface.co/supertone-oss-archive/supertonic-3/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Read the OpenRAIL-M model license</a>.</small>
             </div>
 
-            <div class="field server-connection-field">
-              <label for="serverApiUrl">Multilingual engine</label>
-              <input id="serverApiUrl" type="url" placeholder="https://your-space-name.hf.space" autocomplete="url" spellcheck="false">
-              <input id="serverApiKey" type="password" placeholder="Optional API key" autocomplete="off" aria-label="Optional multilingual API key">
-              <button id="connectServerButton" class="button button-secondary server-connect-button" type="button">Connect / refresh</button>
-              <small id="serverConnectionStatus" role="status">Not connected. The local multilingual engine above works without a server.</small>
-              <small>Only scripts using a remote voice are sent to the server you configure here. Browser and on-device voices remain local.</small>
+            <div class="voice-preview-row shared-voice-preview">
+              <button id="previewVoiceButton" class="button button-secondary preview-voice-button" type="button" disabled>Preview voice</button>
+              <audio id="voicePreviewAudio" class="voice-preview-audio" controls preload="none" hidden aria-label="Selected voice preview"></audio>
             </div>
 
             <div class="field speed-setting">
@@ -149,7 +208,7 @@
               <span class="local-tag"><span></span> Local</span>
             </div>
 
-            <button id="loadButton" class="button button-secondary load-button" type="button">Load voice model</button>
+            <button id="loadButton" class="button button-secondary load-button" type="button">Load Kokoro voice model</button>
             <button id="generateButton" class="button button-primary generate-button" type="button" disabled>
               <span aria-hidden="true">✦</span> Generate voiceover
             </button>

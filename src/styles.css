@@ -238,3 +238,16 @@ input[type="range"] { display: block; width: 100%; margin: 13px 0 0; accent-colo
 @media (max-width: 560px) {
   .multilingual-local-field { margin-top: 18px; }
 }
+
+
+/* Separate local multilingual engine controls. */
+#supertonicEngineControls[hidden],
+#kokoroEngineControls[hidden],
+#loadButton[hidden] { display: none !important; }
+.supertonic-load-button { width: 100%; min-height: 38px; margin: 10px 0 8px; font-size: 9px; }
+#supertonicEngineControls small[role="status"] { display: block; color: #b7a9ff; overflow-wrap: anywhere; margin-top: 7px; line-height: 1.6; }
+.license-consent { display: grid; grid-template-columns: 17px minmax(0,1fr); align-items: start; gap: 9px; margin: 12px 0 4px; color: #b8b8c2; font-size: 10px; line-height: 1.6; cursor: pointer; }
+.license-consent input { width: 14px; height: 14px; margin: 2px 0 0; accent-color: var(--accent); }
+.license-consent span { display: block; }
+.shared-voice-preview { margin-top: 12px; }
+#supertonicEngineControls a { color: #c5b6ff; text-decoration: underline; text-underline-offset: 2px; }
