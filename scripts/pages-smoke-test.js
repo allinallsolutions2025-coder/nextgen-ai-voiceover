@@ -152,23 +152,24 @@ try {
   const unavailableVoices = voiceOptions.filter(option => option.disabled);
   report.voiceCount = voiceOptions.length;
   report.runtimeVoiceCount = voices.length;
-  report.multilingualVoicesRequireServer = unavailableVoices.length;
+  report.removedNonEnglishKokoroVoices = 26;
   report.voiceSample = voiceOptions.slice(0, 12);
   report.requiredVoicesPresent = ["am_adam", "af_heart", "bf_emma", "bm_george"].every(id => voices.includes(id));
-  assert.equal(voiceOptions.length, 54, "Expected the full 54-entry Kokoro catalogue to remain visible.");
-  assert.equal(voices.length, 28, "Expected only 28 browser-supported English voices to be selectable.");
-  assert.equal(unavailableVoices.length, 26, "Expected 26 multilingual voices to be disabled until a server engine is connected.");
-  assert.equal(report.requiredVoicesPresent, true, "One or more expected browser voices are missing.");
-  assert(unavailableVoices.every(option => option.label.includes("load locally")), "Disabled multilingual options must explain that they can be loaded on this device.");
-  assert(unavailableVoices.some(option => option.id === "zf_xiaoyi" && option.disabled), "zf_xiaoyi must not be selectable in the English-only browser engine.");
-  report.checks.multipleVoicesDiscovered = true;
-  report.checks.onlyRuntimeSupportedVoicesSelectable = true;
-  report.checks.multilingualVoicesClearlyDisabled = true;
+  assert.equal(voiceOptions.length, 28, "Expected exactly 28 English Kokoro voices in the product catalogue.");
+  assert.equal(voices.length, 28, "All 28 English Kokoro voices should be selectable.");
+  assert.equal(unavailableVoices.length, 0, "Non-English Kokoro entries must be removed, not shown as disabled voices.");
+  assert.equal(report.requiredVoicesPresent, true, "One or more expected English Kokoro voices are missing.");
+  assert(voiceOptions.every(option => /^[ab][fm]_/.test(option.id)), "The Kokoro menu must contain English IDs only.");
+  assert.equal(await page.locator("#voiceSelect option[value='zf_xiaoyi']").count(), 0, "Non-English Kokoro voice IDs must not appear.");
+  assert.equal(await page.locator("#voiceSelect option[value='ff_siwis']").count(), 0, "Non-English Kokoro voice IDs must not appear.");
+  report.checks.only28EnglishKokoroVoicesVisible = true;
+  report.checks.nonEnglishKokoroRemoved = true;
   assert.equal(await page.locator("#outputFormat option").count(), 2, "Expected WAV and MP3 output choices.");
 
   temporaryDirectory = await mkdtemp(join(tmpdir(), "nextgen-pages-test-"));
 
   // Two paragraphs verify the individual WAVs and one continuous full-script WAV.
+  await page.locator("#speechEngineSelect").selectOption("kokoro");
   await page.locator("#voiceSelect").selectOption("am_adam");
   const firstParagraph = "This is the first short paragraph for the voiceover export test.";
   const secondParagraph = "This is the second paragraph. The full script should also be generated as one continuous voiceover.";
@@ -285,128 +286,54 @@ try {
   assert.equal(await page.locator("#fullScriptAudio .format-tag").innerText(), "MP3");
   report.checks.mp3Output = true;
 
-  // Test the multilingual client path with a deterministic in-browser API mock.
-  const mockEngineUrl = "https://mock-multilingual-engine.local";
-  const sampleCount = 12000;
-  const mockWav = Buffer.alloc(44 + sampleCount * 2);
-  mockWav.write("RIFF", 0);
-  mockWav.writeUInt32LE(36 + sampleCount * 2, 4);
-  mockWav.write("WAVE", 8);
-  mockWav.write("fmt ", 12);
-  mockWav.writeUInt32LE(16, 16);
-  mockWav.writeUInt16LE(1, 20);
-  mockWav.writeUInt16LE(1, 22);
-  mockWav.writeUInt32LE(24000, 24);
-  mockWav.writeUInt32LE(48000, 28);
-  mockWav.writeUInt16LE(2, 32);
-  mockWav.writeUInt16LE(16, 34);
-  mockWav.write("data", 36);
-  mockWav.writeUInt32LE(sampleCount * 2, 40);
-  for (let i = 0; i < sampleCount; i += 1) {
-    mockWav.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 440 * i / 24000) * 8000), 44 + i * 2);
-  }
-  const allowedOrigin = new URL(targetUrl).origin;
-  let remoteCalls = 0;
-  await page.route(mockEngineUrl + "/**", async route => {
-    const request = route.request();
-    const common = {
-      "access-control-allow-origin": allowedOrigin,
-      "access-control-allow-methods": "GET, POST, OPTIONS",
-      "access-control-allow-headers": "Content-Type, X-API-Key"
-    };
-    const pathname = new URL(request.url()).pathname;
-    if (request.method() === "OPTIONS") {
-      await route.fulfill({ status: 204, headers: common });
-    } else if (pathname === "/health") {
-      await route.fulfill({ status: 200, headers: { ...common, "content-type": "application/json" },
-        body: JSON.stringify({ status: "ready", device: "mock", voice_count: 26 }) });
-    } else if (pathname === "/v1/voices") {
-      await route.fulfill({ status: 200, headers: { ...common, "content-type": "application/json" },
-        body: JSON.stringify({ voices: unavailableVoices.map(option => ({ id: option.id })) }) });
-    } else if (pathname === "/v1/audio/speech" && request.method() === "POST") {
-      const body = request.postDataJSON();
-      assert.equal(body.voice, "zf_xiaoyi");
-      assert(body.input && body.input.length > 0);
-      assert(body.speed >= 0.5 && body.speed <= 2);
-      remoteCalls += 1;
-      await route.fulfill({ status: 200, headers: { ...common, "content-type": "audio/wav" }, body: mockWav });
-    } else {
-      await route.fulfill({ status: 404, headers: common, body: "not found" });
-    }
-  });
+  // Test the independent Supertonic 3 browser engine; it does not add to the Kokoro list.
+  assert.equal(await page.locator("#speechEngineSelect option").count(), 2, "Expected separate Kokoro and Supertonic engine choices.");
+  await page.locator("#speechEngineSelect").selectOption("supertonic");
+  assert.equal(await page.locator("#supertonicEngineControls").isVisible(), true);
+  assert.equal(await page.locator("#kokoroEngineControls").isVisible(), false);
+  const languageOptions = await page.locator("#supertonicLanguageSelect option").count();
+  const styleOptions = await page.locator("#supertonicVoiceStyleSelect option").count();
+  assert.equal(languageOptions, 32, "Expected 31 named languages plus language-agnostic mode.");
+  assert.equal(styleOptions, 10, "Expected ten Supertonic preset styles.");
+  report.supertonicLanguageOptionCount = languageOptions;
+  report.supertonicVoiceStyleCount = styleOptions;
+  report.checks.supertonicControlsPresent = true;
 
-  await page.locator("#serverApiUrl").fill(mockEngineUrl);
-  await page.locator("#connectServerButton").click();
-  await page.waitForFunction(() => (document.querySelector("#serverConnectionStatus")?.textContent || "").startsWith("Connected"));
-  assert.equal(await page.locator("#voiceSelect option[value='zf_xiaoyi']").isDisabled(), false);
-  await page.locator("#voiceSelect").selectOption("zf_xiaoyi");
-  await page.locator("#outputFormat").selectOption("wav");
-  await page.locator("#scriptInput").fill("你好，这是多语言语音测试。");
-  await page.locator("#generateButton").click();
-  await waitForGeneration(page);
-  const remoteWav = await inspectAudio(page, "#fullScriptAudio audio");
-  assert(remoteWav.validWav && remoteWav.sizeBytes > 44);
-  assert.equal(remoteCalls, 1);
-  report.remoteWavOutput = remoteWav;
-  report.checks.multilingualVoiceEnabledByServerCatalogue = true;
-  report.checks.multilingualRemoteWavOutput = true;
-
-  await page.locator("#outputFormat").selectOption("mp3");
-  await page.locator("#scriptInput").fill("你好，这是 MP3 格式测试。");
-  await page.locator("#generateButton").click();
-  await waitForGeneration(page);
-  const remoteMp3 = await inspectAudio(page, "#fullScriptAudio audio");
-  assert(remoteMp3.validMp3 && remoteMp3.sizeBytes > 100);
-  assert.equal(remoteCalls, 2);
-  report.remoteMp3Output = remoteMp3;
-  report.checks.multilingualRemoteMp3Output = true;
-
-  await page.locator("#serverApiUrl").fill("");
-  await page.locator("#connectServerButton").click();
-  assert.equal(await page.locator("#voiceSelect option[value='zf_xiaoyi']").isDisabled(), true);
-  report.checks.multilingualServerDisconnectWorks = true;
-  await page.locator("#outputFormat").selectOption("wav");
-
-  // Load all remaining Kokoro voices directly in the browser, without a server.
-  await page.locator("#loadMultilingualButton").click();
+  await page.locator("#acceptSupertonicLicense").check();
+  await page.locator("#loadSupertonicButton").click();
   await page.waitForFunction(() => {
-    const status = document.querySelector("#multilingualModelStatus")?.textContent || "";
-    return status.startsWith("Ready · all 54") || status.startsWith("Could not load");
-  }, null, { timeout: 12 * 60 * 1000 });
-  const multilingualStatus = await page.locator("#multilingualModelStatus").innerText();
-  assert(multilingualStatus.startsWith("Ready · all 54"), "Local 54-voice model failed: " + multilingualStatus);
-  report.checks.localMultilingualModelLoaded = true;
+    const status = document.querySelector("#supertonicModelStatus")?.textContent || "";
+    return status.startsWith("Ready · 31 languages") || status.startsWith("Could not load Supertonic 3:");
+  }, null, { timeout: 20 * 60 * 1000 });
+  const supertonicStatus = await page.locator("#supertonicModelStatus").innerText();
+  assert(supertonicStatus.startsWith("Ready · 31 languages"), "Supertonic 3 failed to load: " + supertonicStatus);
+  report.checks.supertonicOnnxModelLoaded = true;
 
-  const localVoiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
-    id: option.value, disabled: option.disabled, label: option.textContent.trim()
-  })));
-  const localVoiceIds = localVoiceOptions.filter(option => !option.disabled).map(option => option.id);
-  assert.equal(localVoiceIds.length, 54, "Expected all 54 Kokoro voices to be selectable after local model load.");
-  assert(localVoiceOptions.some(option => option.id === "zf_xiaoyi" && !option.disabled && option.label.includes("local")),
-    "A previously server-only Chinese voice was not enabled locally.");
-  report.localVoiceCount = localVoiceIds.length;
-  report.checks.all54VoicesAvailableWithoutServer = true;
+  await page.locator("#supertonicLanguageSelect").selectOption("hi");
+  await page.locator("#supertonicVoiceStyleSelect").selectOption("M1");
+  await page.locator("#scriptInput").fill("नमस्ते, यह आवाज़ आपके डिवाइस पर स्थानीय रूप से तैयार की गई है।");
+  await page.locator("#generateButton").click();
+  await waitForGeneration(page);
+  const hindiWav = await inspectAudio(page, "#fullScriptAudio audio");
+  assert(hindiWav.validWav && hindiWav.sizeBytes > 44, "Supertonic did not produce a valid local Hindi WAV.");
+  report.supertonicHindiWav = hindiWav;
+  report.checks.supertonicHindiLocalSynthesis = true;
 
-  const multilingualSamples = [
-    { voice: "ef_dora", text: "La síntesis de voz funciona directamente en este dispositivo." },
-    { voice: "ff_siwis", text: "Bonjour, cette voix française fonctionne directement dans votre navigateur." },
-    { voice: "hf_alpha", text: "नमस्ते, यह आवाज़ सीधे आपके डिवाइस पर तैयार होती है।" },
-    { voice: "if_sara", text: "Ciao, questa voce italiana viene generata direttamente sul dispositivo." },
-    { voice: "jf_alpha", text: "こんにちは。この音声はブラウザー内で生成されます。" },
-    { voice: "pf_dora", text: "Olá, esta voz em português funciona diretamente no seu dispositivo." },
-    { voice: "zf_xiaobei", text: "你好，这段语音直接在你的设备上生成。" }
-  ];
-  report.multilingualVoiceTests = [];
-  for (const sample of multilingualSamples) {
-    await page.locator("#voiceSelect").selectOption(sample.voice);
-    await page.locator("#scriptInput").fill(sample.text);
-    await page.locator("#generateButton").click();
-    await waitForGeneration(page);
-    const wav = await inspectAudio(page, "#fullScriptAudio audio");
-    assert(wav.validWav && wav.sizeBytes > 44, sample.voice + " did not produce a valid local WAV.");
-    report.multilingualVoiceTests.push({ voice: sample.voice, wav });
-  }
-  report.checks.nonEnglishLocalSynthesis = true;
+  await page.locator("#supertonicLanguageSelect").selectOption("es");
+  await page.locator("#supertonicVoiceStyleSelect").selectOption("F1");
+  await page.locator("#scriptInput").fill("Hola, esta voz se genera directamente en tu dispositivo.");
+  await page.locator("#generateButton").click();
+  await waitForGeneration(page);
+  const spanishWav = await inspectAudio(page, "#fullScriptAudio audio");
+  assert(spanishWav.validWav && spanishWav.sizeBytes > 44, "Supertonic did not produce a valid local Spanish WAV.");
+  report.supertonicSpanishWav = spanishWav;
+  report.checks.supertonicSpanishLocalSynthesis = true;
+
+  await page.locator("#speechEngineSelect").selectOption("kokoro");
+  const kokoroAfterSupertonic = await page.locator("#voiceSelect option").evaluateAll(options => options.map(o => o.value));
+  assert.equal(kokoroAfterSupertonic.length, 28);
+  assert(!kokoroAfterSupertonic.includes("zf_xiaoyi") && !kokoroAfterSupertonic.includes("ff_siwis"));
+  report.checks.supertonicDoesNotAddKokoroVoiceIds = true;
 
   // Exercise one voice from each available English voice group.
   const representativeVoices = ["af_heart", "bf_emma", "bm_george"];

@@ -6,6 +6,9 @@ const requiredFiles = [
   "src/styles.css",
   "src/lib/text.js",
   "src/lib/voice-catalog.js",
+  "src/lib/supertonic.js",
+  "LICENSES/SUPERTONIC-3-OPENRAIL-M.txt",
+  "LICENSES/SUPERTONIC-WEB-CODE-MIT.txt",
   "backend/app.py",
   "backend/voice_catalog.py",
   "backend/Dockerfile",
@@ -24,16 +27,19 @@ const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
 const requiredHtmlMarkers = [
   'id="scriptInput"',
   'id="paragraphCount"',
+  'id="speechEngineSelect"',
+  'id="kokoroEngineControls"',
+  'id="supertonicEngineControls"',
+  'id="supertonicLanguageSelect"',
+  'id="supertonicVoiceStyleSelect"',
+  'id="acceptSupertonicLicense"',
+  'id="loadSupertonicButton"',
+  'id="supertonicModelStatus"',
   'id="loadButton"',
   'id="generateButton"',
   'id="fullScriptAudio"',
   'id="fullScriptDownload"',
   'id="zipDownload"',
-  'id="serverApiUrl"',
-  'id="serverApiKey"',
-  'id="connectServerButton"',
-  'id="loadMultilingualButton"',
-  'id="multilingualModelStatus"',
   'id="draftStatus"',
   'id="previewVoiceButton"',
   'id="voicePreviewAudio"',
@@ -55,30 +61,48 @@ if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The sp
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
 if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") || !main.includes("nextgen-voiceover-draft-v1")) throw new Error("Local script draft save and recovery are required.");
 if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
-if (!main.includes("@mediapipe/tasks-audio@1.2.0") ||
-    !main.includes("audio_bundle.js") ||
-    !main.includes("__nextGenKokoroBaseOptionsPatch") ||
-    !main.includes("this.setExternalFile(modelPath)") ||
-    !main.includes("getMediaPipeAudioApi") ||
-    !main.includes("kokoro_int8_fp16.litertlm") ||
-    !main.includes("TextToSpeech.createFromOptions") ||
-    !main.includes("tts.listVoices()") ||
-    !main.includes("forAudioTasks(MEDIAPIPE_WASM)")) {
-  throw new Error("The full local MediaPipe Kokoro model and 54-voice catalogue are required.");
+if (!main.includes("onnxruntime-web@1.31.1") ||
+    !main.includes("aafc6e32416a594460b32413efc49d7fe4ce6d46") ||
+    !main.includes("loadTextToSpeech") ||
+    !main.includes("state.supertonicTts.call") ||
+    !main.includes("generateSupertonicSpeechBlob")) {
+  throw new Error("The separate local Supertonic 3 ONNX engine and synthesis path are required.");
 }
-if (!main.includes("generateMultilingualSpeechBlob") ||
-    !main.includes("state.multilingualVoiceIds.has(voice)")) {
-  throw new Error("The additional Kokoro voices must synthesize on-device without a server.");
+if (/MediaPipe|multilingualVoiceIds|loadMultilingualButton|kokoro_int8_fp16/.test(main)) {
+  throw new Error("The failed local Kokoro multilingual implementation must remain removed.");
 }
 if (!main.includes("activeAbortController") || !main.includes("Generation stopped.")) throw new Error("Generation cancellation is required.");
 if (!main.includes("await loadModel();") || !main.includes("navigator.storage.persist")) throw new Error("The model must restore automatically and request persistent browser storage.");
 if (!main.includes("normalizeVoiceCatalog(tts?.voices ?? [])")) throw new Error("The app must enable only voices reported by a real runtime.");
-if (!main.includes("serverVoices") || !main.includes("connectServer") || !main.includes("generateRemoteSpeechBlob")) throw new Error("The multilingual backend connection and remote synthesis path are missing.");
-if (!main.includes("state.supportedVoiceIds.has(voice)") || !main.includes("state.serverVoiceIds.has(voice)")) throw new Error("Every selected voice must be verified against a live synthesis engine.");
+if (!main.includes("state.supportedVoiceIds.has(selectedVoice)") ||
+    !main.includes("state.supertonicTts")) throw new Error("Selected voices must map to a loaded local speech engine.");
 if (!main.includes("LAMEJS_CDN") || !main.includes("createMp3BlobFromSamples")) throw new Error("MP3 export support is missing.");
 if (!html.includes('id="outputFormat"') || !html.includes('value="mp3"')) throw new Error("A user-selectable output format is required.");
+if (!html.includes('value="na">Auto / language-agnostic') ||
+    !html.includes('value="hi">Hindi') ||
+    !html.includes('value="vi">Vietnamese')) {
+  throw new Error("Supertonic's supported language options are incomplete.");
+}
+if (!html.includes('id="speechEngineSelect"') || !html.includes('value="supertonic"')) {
+  throw new Error("Kokoro and Supertonic must remain separate selectable engines.");
+}
+if (!html.includes('Read the OpenRAIL-M model license')) throw new Error("The Supertonic model license must be linked in the UI.");
 const voiceCatalog = await readFile(new URL("../src/lib/voice-catalog.js", import.meta.url), "utf8");
-if (!voiceCatalog.includes("pf_dora") || !voiceCatalog.includes("zf_xiaobei") || !voiceCatalog.includes("ff_siwis")) throw new Error("Multilingual voice presets are missing.");
+if (!voiceCatalog.includes("af_heart") || !voiceCatalog.includes("bf_emma") ||
+    /zf_xiaoyi|ff_siwis|hf_alpha|pf_dora/.test(voiceCatalog)) {
+  throw new Error("The Kokoro catalogue must contain only its 28 English voices.");
+}
+const supertonicHelper = await readFile(new URL("../src/lib/supertonic.js", import.meta.url), "utf8");
+if (!supertonicHelper.includes("export const AVAILABLE_LANGS") ||
+    !supertonicHelper.includes("export async function loadTextToSpeech") ||
+    !supertonicHelper.includes("export async function loadVoiceStyle")) {
+  throw new Error("The Supertonic ONNX browser helper is incomplete.");
+}
+for (const licenseFile of ["SUPERTONIC-3-OPENRAIL-M.txt", "SUPERTONIC-WEB-CODE-MIT.txt"]) {
+  const licenseText = await readFile(new URL("../LICENSES/" + licenseFile, import.meta.url), "utf8");
+  if (!licenseText.trim()) throw new Error("Missing Supertonic license notice: " + licenseFile);
+}
+
 const backendApp = await readFile(new URL("../backend/app.py", import.meta.url), "utf8");
 const backendCatalog = await readFile(new URL("../backend/voice_catalog.py", import.meta.url), "utf8");
 if (!backendApp.includes("KPipeline(lang_code=code") || !backendApp.includes("KModel(repo_id=MODEL_REPO_ID)")) throw new Error("The server must use the Kokoro Python multilingual pipeline.");
