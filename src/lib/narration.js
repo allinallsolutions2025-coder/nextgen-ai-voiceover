@@ -135,7 +135,7 @@ function normalizeDates(text) {
   const monthFirst = new RegExp("\\b(" + MONTH_PATTERN + ")\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+((?:19|20)\\d{2}))?\\b", "gi");
   result = result.replace(monthFirst, (whole, month, day, year) => {
     const m = monthNumber(month), d = Number(day);
-    if (!m || d < 1 || d > 31) return whole;
+    if (!m || d < 1 || d > 31 || !validDate(year ? Number(year) : 2000, m, d)) return whole;
     return monthName(month) + " " + ordinalToWords(d) + (year ? ", " + yearToWords(year) : "");
   });
 
