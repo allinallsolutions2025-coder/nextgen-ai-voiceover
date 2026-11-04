@@ -158,6 +158,8 @@ try {
   assert.equal(report.checks.favoriteVoiceControlPresent, true, "Voice favourite control is missing.");
   report.checks.spokenTextPreviewPresent = await page.locator("#spokenPreviewText").count() === 1;
   assert.equal(report.checks.spokenTextPreviewPresent, true, "Prepared spoken-text preview is missing.");
+  report.checks.recentVoiceStatusPresent = await page.locator("#recentVoiceHelp").count() === 1;
+  assert.equal(report.checks.recentVoiceStatusPresent, true, "Recently used voice indicator is missing.");
 
   const voiceOptions = await page.locator("#voiceSelect option").evaluateAll(options => options.map(option => ({
     id: option.value, label: option.textContent.trim(), disabled: option.disabled
@@ -184,6 +186,7 @@ try {
 
   // Two paragraphs verify the individual WAVs and one continuous full-script WAV.
   await page.locator("#voiceSelect").selectOption("am_adam");
+  assert.match(await page.locator("#recentVoiceHelp").innerText(), /Adam/, "Recently used voice was not shown.");
   await page.locator("#favoriteVoiceButton").click();
   assert.equal(await page.locator("#favoriteVoiceButton").getAttribute("aria-pressed"), "true");
   assert.deepEqual(
@@ -205,8 +208,10 @@ try {
     null, { timeout: 8 * 60 * 1000 });
   assert.equal(await page.locator("#scriptInput").inputValue(), draftText, "The local script draft was not restored after reload.");
   report.checks.localDraftRecovery = true;
+  await page.locator("#voiceSelect").selectOption("am_adam");
   assert.equal(await page.locator("#favoriteVoiceButton").getAttribute("aria-pressed"), "true",
     "Favourite voice was not restored after reload.");
+  assert.match(await page.locator("#recentVoiceHelp").innerText(), /Adam/, "Recent voice was not restored after reload.");
   await page.locator("#voiceFilterSelect").selectOption("favorites");
   assert.equal(await page.locator("#voiceSelect option").count(), 1, "Favourite voice filter should show the saved voice.");
   assert.equal(await page.locator("#voiceSelect").inputValue(), "am_adam");
@@ -317,7 +322,7 @@ try {
   report.checks.mp3Output = true;
 
   // Exercise the English voice filters and preset speaking speeds.
-  assert.equal(await page.locator("#voiceFilterSelect option").count(), 5, "Expected all, accent and gender filters.");
+  assert.equal(await page.locator("#voiceFilterSelect option").count(), 6, "Expected all, accent, gender and favorites filters.");
   await page.locator("#voiceFilterSelect").selectOption("american");
   const americanCount = await page.locator("#voiceSelect option").count();
   assert.equal(americanCount, 20, "Expected 20 American English voices.");
