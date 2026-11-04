@@ -179,7 +179,7 @@ function updateParagraphEditorControls() {
   const busy = state.isGenerating || state.isPreviewing || state.isBenchmarking;
   for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-regenerate")) {
     const index = Number(button.dataset.paragraphIndex);
-    const hasAudio = Boolean(state.generatedParagraphBlobs[index]);
+    const hasAudio = Boolean(state.generatedParagraphBlobs[index] && state.fullScriptBlob);
     button.disabled = busy || !hasAudio;
     button.textContent = hasAudio ? "Regenerate section" : "Generate with script";
   }
@@ -603,6 +603,11 @@ function renderVoiceSelector() {
 function populateVoiceSelector(tts = null) {
   state.voiceCatalog = normalizeVoiceCatalog(tts?.voices ?? []);
   state.supportedVoiceIds = new Set(state.voiceCatalog.map((voice) => voice.id));
+  state.paragraphs = state.paragraphs.map(paragraph => ({
+    ...paragraph,
+    voice: paragraph.voice && state.supportedVoiceIds.has(paragraph.voice) ? paragraph.voice : ""
+  }));
+  persistParagraphSettings();
   renderVoiceSelector();
   renderParagraphEditor();
 }
@@ -1261,7 +1266,6 @@ async function generateAudio() {
   for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
   elements.outputFormat.disabled = true;
   elements.runBenchmarkButton.disabled = true;
-  setParagraphEditorBusy(true);
   renderParagraphEditor();
   setParagraphEditorBusy(true);
   setProgress(1);
@@ -1288,7 +1292,9 @@ async function generateAudio() {
       tts, transformTextForSpeech(speechText, pronunciation.rules),
       selectedVoice, speed, outputFormat, controller.signal
     );
-    const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
+    const needsSeparateFullScript = validation.paragraphs.length > 1 ||
+      state.paragraphs.some(paragraph => paragraph.voice || paragraph.speed);
+    const jobCount = validation.paragraphs.length + (needsSeparateFullScript ? 1 : 0);
     let completedJobs = 0;
 
     for (let index = 0; index < validation.paragraphs.length; index += 1) {
@@ -1322,7 +1328,7 @@ async function generateAudio() {
     }
 
     let fullScriptBlob;
-    if (outputBlobs.length === 1) {
+    if (outputBlobs.length === 1 && !needsSeparateFullScript) {
       fullScriptBlob = outputBlobs[0];
     } else {
       setStatus("Generating one continuous English voiceover for the complete script…");
@@ -1344,7 +1350,6 @@ async function generateAudio() {
     setStatus("Packaging the full-script and paragraph " + formatLabel(outputFormat) + " files…");
     setProgress(96);
     await refreshZipDownload();
-    elements.resultsPanel.hidden = false;
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
       "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
