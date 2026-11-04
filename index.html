@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Create paragraph-by-paragraph and full-script voiceovers with NextGen AI Voiceover, powered by Kokoro in your browser.">
+  <meta name="description" content="Create natural American and British English voiceovers with 28 Kokoro voices, custom pronunciation rules and local WAV or MP3 exports.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%237c5cff%27/%3E%3Cpath d=%27M20 18h7l10 17V18h7v28h-7L27 29v17h-7z%27 fill=%27white%27/%3E%3C/svg%3E">
   <title>NextGen AI Voiceover — Voiceover Studio</title>
   <link rel="stylesheet" href="./src/styles.css">
@@ -42,7 +42,7 @@
       <header class="topbar">
         <div class="breadcrumb"><span>Workspace</span><span class="crumb-separator">/</span><strong>Text to Speech</strong></div>
         <div class="topbar-status">
-          <span class="engine-label"><span class="engine-dot"></span><span id="engineLabel">Local generation</span></span>
+          <span class="engine-label"><span class="engine-dot"></span><span id="engineLabel">Kokoro · English · local</span></span>
           <span id="modelBadge" class="badge badge-idle">Model not loaded</span>
         </div>
       </header>
@@ -51,9 +51,9 @@
         <div>
           <p class="eyebrow">VOICEOVER STUDIO</p>
           <h1>Text to Speech</h1>
-          <p class="page-subtitle">Turn your script into natural-sounding speech. Generate each paragraph separately or create one voiceover for the complete script.</p>
+          <p class="page-subtitle">Create English voiceovers with 28 American and British voices. Fine-tune pronunciation and speaking pace, then export each paragraph or one complete narration.</p>
         </div>
-        <div class="format-pill"><span class="format-wave" aria-hidden="true">≋</span> WAV output</div>
+        <div class="format-pill"><span class="format-wave" aria-hidden="true">≋</span> English · On-device</div>
       </section>
 
       <section class="studio-grid">
@@ -80,6 +80,19 @@
             </div>
           </section>
 
+          <details class="pronunciation-tools">
+            <summary>
+              <span><strong>Pronunciation guide</strong><small>Teach the voice how to say names, brands and abbreviations</small></span>
+              <span class="details-chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="pronunciation-content">
+              <label for="pronunciationRules">Custom pronunciation rules</label>
+              <textarea id="pronunciationRules" rows="4" maxlength="4000" spellcheck="false" placeholder="OpenAI = Open A I&#10;YouTube = You Tube&#10;SQL = sequel"></textarea>
+              <p class="pronunciation-hint">One rule per line: <code>word or phrase = how it should sound</code>. Matching is case-insensitive and applies to speech only; your original script stays unchanged. Start a line with # to add a comment.</p>
+              <p id="pronunciationStatus" class="pronunciation-status" role="status">No custom pronunciation rules</p>
+            </div>
+          </details>
+
           <section id="resultsPanel" class="panel results-panel" aria-labelledby="resultsHeading" hidden>
             <div class="panel-heading result-heading">
               <div>
@@ -92,7 +105,7 @@
             <div id="audioResults" class="audio-results"></div>
           </section>
 
-          <div class="privacy-note"><span aria-hidden="true">◈</span> Browser voices keep your script on this device. Remote voice scripts are sent to the multilingual endpoint you connect.</div>
+          <div class="privacy-note"><span aria-hidden="true">◈</span> Your script and pronunciation rules stay in this browser. Speech is generated locally; model files are downloaded to your browser cache.</div>
         </div>
 
         <aside class="settings-column" aria-label="Voice and generation settings">
@@ -103,95 +116,39 @@
             </div>
 
             <div class="field">
-              <label for="speechEngineSelect">Speech engine</label>
-              <select id="speechEngineSelect">
-                <option value="kokoro" selected>Kokoro · 28 English voices</option>
-                <option value="supertonic">Supertonic 3 · 31 languages</option>
+              <label for="voiceFilterSelect">Show voices</label>
+              <select id="voiceFilterSelect">
+                <option value="all" selected>All English voices · 28</option>
+                <option value="american">American English</option>
+                <option value="british">British English</option>
+                <option value="female">Female voices</option>
+                <option value="male">Male voices</option>
               </select>
-              <small>These are separate models. Supertonic's ten preset styles do not add or rename Kokoro voices.</small>
+              <small>Filter by accent or voice type to compare the English catalogue.</small>
             </div>
 
-            <div id="kokoroEngineControls">
-              <div class="field">
-                <label for="voiceSelect">Kokoro voice</label>
-                <select id="voiceSelect" disabled>
-                  <option value="">Voice list loads automatically…</option>
-                </select>
-                <small id="voiceHelp">28 American and British English Kokoro voices · generated locally in your browser.</small>
-              </div>
+            <div class="field">
+              <label for="voiceSelect">English voice</label>
+              <select id="voiceSelect" disabled>
+                <option value="">Voice list loads automatically…</option>
+              </select>
+              <small id="voiceHelp">28 American and British English voices · generated locally in your browser.</small>
             </div>
 
-            <div id="supertonicEngineControls" hidden>
-              <div class="field">
-                <label for="supertonicLanguageSelect">Language · 31 supported</label>
-                <select id="supertonicLanguageSelect">
-                  <option value="en" selected>English</option>
-                  <option value="ko">Korean</option>
-                  <option value="ja">Japanese</option>
-                  <option value="ar">Arabic</option>
-                  <option value="bg">Bulgarian</option>
-                  <option value="cs">Czech</option>
-                  <option value="da">Danish</option>
-                  <option value="de">German</option>
-                  <option value="el">Greek</option>
-                  <option value="es">Spanish</option>
-                  <option value="et">Estonian</option>
-                  <option value="fi">Finnish</option>
-                  <option value="fr">French</option>
-                  <option value="hi">Hindi</option>
-                  <option value="hr">Croatian</option>
-                  <option value="hu">Hungarian</option>
-                  <option value="id">Indonesian</option>
-                  <option value="it">Italian</option>
-                  <option value="lt">Lithuanian</option>
-                  <option value="lv">Latvian</option>
-                  <option value="nl">Dutch</option>
-                  <option value="pl">Polish</option>
-                  <option value="pt">Portuguese</option>
-                  <option value="ro">Romanian</option>
-                  <option value="ru">Russian</option>
-                  <option value="sk">Slovak</option>
-                  <option value="sl">Slovenian</option>
-                  <option value="sv">Swedish</option>
-                  <option value="tr">Turkish</option>
-                  <option value="uk">Ukrainian</option>
-                  <option value="vi">Vietnamese</option>
-                  <option value="na">Auto / language-agnostic</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="supertonicVoiceStyleSelect">Preset voice style · 10 available</label>
-                <select id="supertonicVoiceStyleSelect">
-                  <option value="M1" selected>Male 1 (M1)</option>
-                  <option value="M2">Male 2 (M2)</option>
-                  <option value="M3">Male 3 (M3)</option>
-                  <option value="M4">Male 4 (M4)</option>
-                  <option value="M5">Male 5 (M5)</option>
-                  <option value="F1">Female 1 (F1)</option>
-                  <option value="F2">Female 2 (F2)</option>
-                  <option value="F3">Female 3 (F3)</option>
-                  <option value="F4">Female 4 (F4)</option>
-                  <option value="F5">Female 5 (F5)</option>
-                </select>
-              </div>
-              <label class="license-consent">
-                <input id="acceptSupertonicLicense" type="checkbox">
-                <span>I have read the OpenRAIL-M model license and agree to follow its use restrictions.</span>
-              </label>
-              <button id="loadSupertonicButton" class="button button-secondary supertonic-load-button" type="button">Load Supertonic 3 locally · about 398 MB</button>
-              <small id="supertonicModelStatus" role="status">First-use download: about 398 MB of ONNX weights, then the selected preset style. Speech is generated on this device; no speech server is used.</small>
-              <small>Ten preset styles · no voice cloning. Hindi is supported; Tamil, Telugu, Kannada and Malayalam are not in this model. <a href="https://huggingface.co/supertone-oss-archive/supertonic-3/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Read the OpenRAIL-M model license</a>.</small>
-            </div>
-
-            <div class="voice-preview-row shared-voice-preview">
+            <div class="voice-preview-row shared-voice-preview">            <div class="voice-preview-row shared-voice-preview">
               <button id="previewVoiceButton" class="button button-secondary preview-voice-button" type="button" disabled>Preview voice</button>
               <audio id="voicePreviewAudio" class="voice-preview-audio" controls preload="none" hidden aria-label="Selected voice preview"></audio>
             </div>
 
             <div class="field speed-setting">
-              <div class="range-heading"><label for="speedInput">Speed</label><output id="speedValue" for="speedInput">0.95×</output></div>
-              <input id="speedInput" type="range" min="0.50" max="2.00" step="0.05" value="0.95">
+              <div class="range-heading"><label for="speedInput">Speaking pace</label><output id="speedValue" for="speedInput">1.00×</output></div>
+              <input id="speedInput" type="range" min="0.50" max="2.00" step="0.05" value="1.00">
               <div class="range-ends"><span>0.50×</span><span>2.00×</span></div>
+              <div class="speed-presets" role="group" aria-label="Speaking pace presets">
+                <button type="button" data-speed-preset="0.90" aria-pressed="false">Relaxed</button>
+                <button type="button" data-speed-preset="1.00" aria-pressed="true">Natural</button>
+                <button type="button" data-speed-preset="1.15" aria-pressed="false">Brisk</button>
+              </div>
             </div>
 
             <div class="settings-divider"></div>
