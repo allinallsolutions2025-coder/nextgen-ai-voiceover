@@ -7,9 +7,11 @@ const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
-const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/audio_bundle.js";
-const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.0/wasm";
-const KOKORO_MULTILINGUAL_CPU_MODEL = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
+const ONNXRUNTIME_CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.min.js";
+const ONNXRUNTIME_WASM_BASE = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/";
+const SUPERTONIC_MODEL_BASE = "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46";
+const SUPERTONIC_ONNX_BASE = SUPERTONIC_MODEL_BASE + "/onnx";
+const SUPERTONIC_STYLE_BASE = SUPERTONIC_MODEL_BASE + "/voice_styles";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
@@ -20,10 +22,16 @@ const elements = {
   scriptInput: document.querySelector("#scriptInput"),
   characterCount: document.querySelector("#characterCount"),
   paragraphCount: document.querySelector("#paragraphCount"),
+  speechEngineSelect: document.querySelector("#speechEngineSelect"),
+  kokoroEngineControls: document.querySelector("#kokoroEngineControls"),
+  supertonicEngineControls: document.querySelector("#supertonicEngineControls"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceHelp: document.querySelector("#voiceHelp"),
-  loadMultilingualButton: document.querySelector("#loadMultilingualButton"),
-  multilingualModelStatus: document.querySelector("#multilingualModelStatus"),
+  supertonicLanguageSelect: document.querySelector("#supertonicLanguageSelect"),
+  supertonicVoiceStyleSelect: document.querySelector("#supertonicVoiceStyleSelect"),
+  acceptSupertonicLicense: document.querySelector("#acceptSupertonicLicense"),
+  loadSupertonicButton: document.querySelector("#loadSupertonicButton"),
+  supertonicModelStatus: document.querySelector("#supertonicModelStatus"),
   previewVoiceButton: document.querySelector("#previewVoiceButton"),
   voicePreviewAudio: document.querySelector("#voicePreviewAudio"),
   draftStatus: document.querySelector("#draftStatus"),
@@ -41,10 +49,6 @@ const elements = {
   resultsSummary: document.querySelector("#resultsSummary"),
   audioResults: document.querySelector("#audioResults"),
   zipDownload: document.querySelector("#zipDownload"),
-  serverApiUrl: document.querySelector("#serverApiUrl"),
-  serverApiKey: document.querySelector("#serverApiKey"),
-  connectServerButton: document.querySelector("#connectServerButton"),
-  serverConnectionStatus: document.querySelector("#serverConnectionStatus"),
   engineLabel: document.querySelector("#engineLabel")
 };
 
@@ -55,15 +59,14 @@ const state = {
   jsZipPromise: null,
   lamePromise: null,
   supportedVoiceIds: new Set(),
-  multilingualTts: null,
-  multilingualTtsPromise: null,
-  multilingualVoiceIds: new Set(),
-  multilingualSpeed: null,
-  multilingualLoadSpeed: null,
-  multilingualDelegate: null,
-  serverVoiceIds: new Set(),
-  serverApiBase: "",
-  serverReady: false,
+  supertonicTts: null,
+  supertonicHelpers: null,
+  supertonicLoadPromise: null,
+  supertonicStylePromises: new Map(),
+  supertonicStyles: new Map(),
+  supertonicStyle: null,
+  supertonicStyleName: "",
+  onnxRuntimePromise: null,
   objectUrls: [],
   previewObjectUrl: null,
   previewController: null,
@@ -125,10 +128,12 @@ function restoreDraftLocally() {
 }
 
 function updatePreviewButtonState() {
+  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
   const voice = elements.voiceSelect.value;
-  const isAvailable = state.supportedVoiceIds.has(voice) ||
-    state.multilingualVoiceIds.has(voice) || state.serverVoiceIds.has(voice);
-  elements.previewVoiceButton.disabled = !voice || !isAvailable || state.isGenerating || state.isPreviewing;
+  const voiceAvailable = supertonicSelected
+    ? Boolean(state.supertonicTts && elements.supertonicLanguageSelect.value && elements.scriptInput.value.trim())
+    : Boolean(voice) && state.supportedVoiceIds.has(voice);
+  elements.previewVoiceButton.disabled = !voiceAvailable || state.isGenerating || state.isPreviewing;
 }
 
 function revokeObjectUrls() {
@@ -222,335 +227,162 @@ function populateVoiceSelector(tts = null) {
   const browserVoices = normalizeVoiceCatalog(tts?.voices ?? []);
   const completeCatalog = getCompleteVoiceCatalog(tts?.voices ?? []);
   state.supportedVoiceIds = new Set(browserVoices.map((voice) => voice.id));
-
-  const localMultilingualVoices = completeCatalog.filter((voice) =>
-    state.multilingualVoiceIds.has(voice.id) && !state.supportedVoiceIds.has(voice.id)
-  );
-  const serverVoices = completeCatalog.filter((voice) =>
-    !state.supportedVoiceIds.has(voice.id) &&
-    !state.multilingualVoiceIds.has(voice.id) &&
-    state.serverVoiceIds.has(voice.id)
-  );
-  const unavailableVoices = completeCatalog.filter((voice) =>
-    !state.supportedVoiceIds.has(voice.id) &&
-    !state.multilingualVoiceIds.has(voice.id) &&
-    !state.serverVoiceIds.has(voice.id)
-  );
+  const unavailableVoices = completeCatalog.filter((voice) => !state.supportedVoiceIds.has(voice.id));
 
   elements.voiceSelect.replaceChildren();
-
-  const appendGroups = (voices, suffix, labelForVoice = "") => {
-    const groups = new Map();
-    for (const voice of voices) {
-      if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
-      groups.get(voice.languageLabel).push(voice);
-    }
-    for (const [languageLabel, groupVoices] of groups) {
-      const group = document.createElement("optgroup");
-      group.label = languageLabel + " — " + suffix;
-      for (const voice of groupVoices) {
-        const option = document.createElement("option");
-        option.value = voice.id;
-        option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ")" + labelForVoice;
-        group.append(option);
-      }
-      elements.voiceSelect.append(group);
-    }
-  };
-
-  appendGroups(browserVoices, "browser · WASM");
-  appendGroups(localMultilingualVoices, "on-device · MediaPipe", " · local");
-  appendGroups(serverVoices, "optional server", " · server");
-
-  if (unavailableVoices.length) {
+  const groups = new Map();
+  for (const voice of browserVoices) {
+    if (!groups.has(voice.languageLabel)) groups.set(voice.languageLabel, []);
+    groups.get(voice.languageLabel).push(voice);
+  }
+  for (const [languageLabel, groupVoices] of groups) {
     const group = document.createElement("optgroup");
-    group.label = "Additional voices — load the local model (" + unavailableVoices.length + ")";
-    for (const voice of unavailableVoices) {
+    group.label = languageLabel + " — Kokoro · browser WASM";
+    for (const voice of groupVoices) {
       const option = document.createElement("option");
       option.value = voice.id;
-      option.disabled = true;
-      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ") — load locally";
+      option.textContent = voice.name + " · " + voice.gender + " (" + voice.id + ")";
       group.append(option);
     }
     elements.voiceSelect.append(group);
   }
-
-  const preserved = [...elements.voiceSelect.options].find((option) =>
-    option.value === previousSelection && !option.disabled
-  );
-  const preferred = browserVoices.some((voice) => voice.id === "af_heart") ? "af_heart" :
-    (browserVoices[0]?.id || localMultilingualVoices[0]?.id || serverVoices[0]?.id || "");
+  const preserved = [...elements.voiceSelect.options].find((option) => option.value === previousSelection);
+  const preferred = browserVoices.some((voice) => voice.id === "af_heart") ? "af_heart" : (browserVoices[0]?.id || "");
   elements.voiceSelect.value = preserved?.value || preferred;
-
-  const availableCount = browserVoices.length + localMultilingualVoices.length + serverVoices.length;
-  elements.voiceSelect.disabled = availableCount === 0;
+  elements.voiceSelect.disabled = browserVoices.length === 0;
   elements.voiceHelp.textContent =
-    browserVoices.length + " English browser voices · " +
-    localMultilingualVoices.length + " additional on-device voices · " +
-    unavailableVoices.length + " not loaded" +
-    (serverVoices.length ? " · " + serverVoices.length + " server voices" : "");
+    browserVoices.length + " English Kokoro voices · American and British English only. The 26 non-English Kokoro entries have been removed; use Supertonic 3 for separate local multilingual speech.";
   updatePreviewButtonState();
 }
 
-let mediaPipeAudioBundlePromise = null;
+let onnxRuntimeScriptPromise = null;
 
-async function getMediaPipeAudioApi() {
-  if (globalThis.Audio?.FilesetResolver && globalThis.Audio?.TextToSpeech) {
-    return globalThis.Audio;
-  }
-  if (!mediaPipeAudioBundlePromise) {
-    mediaPipeAudioBundlePromise = new Promise((resolve, reject) => {
+async function getOnnxRuntime() {
+  if (globalThis.ort?.InferenceSession && globalThis.ort?.Tensor) return globalThis.ort;
+  if (!onnxRuntimeScriptPromise) {
+    onnxRuntimeScriptPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = MEDIAPIPE_CDN;
-      script.crossOrigin = "anonymous";
+      script.src = ONNXRUNTIME_CDN;
       script.async = true;
+      script.crossOrigin = "anonymous";
       script.onload = () => {
-        const api = globalThis.Audio;
-        if (api?.FilesetResolver && api?.TextToSpeech) {
-          resolve(api);
-        } else {
-          reject(new Error("The MediaPipe Audio bundle loaded but did not expose FilesetResolver and TextToSpeech."));
-        }
+        const ort = globalThis.ort;
+        if (ort?.InferenceSession && ort?.Tensor) resolve(ort);
+        else reject(new Error("ONNX Runtime Web loaded without exposing its browser API."));
       };
-      script.onerror = () => reject(new Error("Could not load the stable MediaPipe Audio bundle."));
+      script.onerror = () => reject(new Error("Could not load ONNX Runtime Web from jsDelivr."));
       document.head.appendChild(script);
     }).catch((error) => {
-      mediaPipeAudioBundlePromise = null;
+      onnxRuntimeScriptPromise = null;
       throw error;
     });
   }
-  return mediaPipeAudioBundlePromise;
+  return onnxRuntimeScriptPromise;
 }
 
-async function getMultilingualTTS(speed = Number(elements.speedInput.value)) {
-  const requestedSpeed = Math.min(2, Math.max(0.5, Number(speed) || 1));
-  if (state.multilingualTts && state.multilingualSpeed === requestedSpeed) {
-    return state.multilingualTts;
+async function loadSupertonicHelpers() {
+  if (state.supertonicHelpers) return state.supertonicHelpers;
+  const ort = await getOnnxRuntime();
+  ort.env.wasm.wasmPaths = ONNXRUNTIME_WASM_BASE;
+  ort.env.wasm.numThreads = 1;
+  state.supertonicHelpers = await import("./lib/supertonic.js");
+  return state.supertonicHelpers;
+}
+
+async function loadSupertonicVoiceStyle(styleName = elements.supertonicVoiceStyleSelect.value) {
+  if (!state.supertonicTts) throw new Error("Load Supertonic 3 before choosing a voice style.");
+  const name = String(styleName || "M1").toUpperCase();
+  if (!/^[MF][1-5]$/.test(name)) throw new Error("Choose one of the ten Supertonic preset styles.");
+  if (state.supertonicStyles.has(name)) {
+    state.supertonicStyle = state.supertonicStyles.get(name);
+    state.supertonicStyleName = name;
+    return state.supertonicStyle;
   }
-  if (state.multilingualTtsPromise) {
-    if (state.multilingualLoadSpeed === requestedSpeed) return state.multilingualTtsPromise;
-    await state.multilingualTtsPromise.catch(() => {});
+  if (state.supertonicStylePromises.has(name)) return state.supertonicStylePromises.get(name);
+  const promise = (async () => {
+    const { loadVoiceStyle } = await loadSupertonicHelpers();
+    const style = await loadVoiceStyle([SUPERTONIC_STYLE_BASE + "/" + name + ".json"], true);
+    state.supertonicStyles.set(name, style);
+    state.supertonicStyle = style;
+    state.supertonicStyleName = name;
+    return style;
+  })().finally(() => state.supertonicStylePromises.delete(name));
+  state.supertonicStylePromises.set(name, promise);
+  return promise;
+}
+
+async function loadSupertonicModel() {
+  if (!elements.acceptSupertonicLicense.checked) {
+    elements.supertonicModelStatus.textContent = "Please confirm the OpenRAIL-M usage restrictions before loading this model.";
+    setStatus("Supertonic 3 requires acknowledgement of its model-use restrictions.", "error");
+    return;
   }
-  if (state.multilingualTts) {
-    try { await state.multilingualTts.close?.(); } catch {}
-    state.multilingualTts = null;
-    state.multilingualVoiceIds = new Set();
-    state.multilingualSpeed = null;
-    state.multilingualDelegate = null;
+  if (state.supertonicTts) {
+    elements.supertonicModelStatus.textContent = "Ready · Supertonic 3 is already loaded on this device.";
+    return state.supertonicTts;
   }
-
-  state.multilingualLoadSpeed = requestedSpeed;
-  elements.loadMultilingualButton.disabled = true;
-  elements.loadMultilingualButton.textContent = "Loading local multilingual model…";
-  elements.multilingualModelStatus.textContent =
-    "Preparing MediaPipe and downloading the Kokoro multilingual model (about 295 MB). The browser will cache it when storage permits.";
-  setStatus("Loading the on-device multilingual Kokoro model. No speech server is involved…");
-
-  state.multilingualTtsPromise = (async () => {
-    const api = await getMediaPipeAudioApi();
-    // Use the stable MediaPipe Audio Tasks runtime. Register the .litertlm
-    // in both the WASM filesystem and MediaPipe BaseOptions before native init.
-    const wasmFileset = await api.FilesetResolver.forAudioTasks(MEDIAPIPE_WASM);
-    const ttsPrototype = api.TextToSpeech.prototype;
-    if (!ttsPrototype.__nextGenKokoroBaseOptionsPatch) {
-      Object.defineProperty(ttsPrototype, "__nextGenKokoroBaseOptionsPatch", { value: true });
-      ttsPrototype.setOptions = async function (options) {
-        if (this.ttsPtr !== 0) {
-          throw new Error("TextToSpeech does not support updating options after initialization.");
-        }
-        this.delegateType = options.baseOptions?.delegate === "GPU" ? 0 : -1;
-        this.defaultVoiceId = options.defaultVoiceId ?? "";
-        this.defaultLocale = options.defaultLocale ?? "";
-        this.speakingRate = options.speakingRate ?? 1;
-        this.targetBucket = options.targetBucket ?? 0;
-        this.cacheDirectory = options.cacheDirectory ?? "";
-
-        const source = options.baseOptions?.modelAssetPath;
-        const buffer = options.baseOptions?.modelAssetBuffer;
-        if (!source && !buffer) throw new Error("A Kokoro .litertlm model path or buffer is required.");
-
-        let filename = "kokoro_int8_fp16.litertlm";
-        let bytes;
-        if (source) {
-          const sourceUrl = new URL(String(source), window.location.href);
-          filename = decodeURIComponent(sourceUrl.pathname.split("/").pop() || filename);
-          const response = await fetch(sourceUrl.toString(), { cache: "force-cache" });
-          if (!response.ok) throw new Error("Failed to download Kokoro model (" + response.status + ").");
-          bytes = new Uint8Array(await response.arrayBuffer());
-        } else {
-          bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-        }
-        if (!filename.endsWith(".litertlm")) throw new Error("The Kokoro model must retain its original .litertlm filename.");
-
-        const wasmModule = this.graphRunner.wasmModule;
-        const modelPath = "/" + filename;
-        try { wasmModule.FS_unlink(modelPath); } catch {}
-        wasmModule.FS_createDataFile("/", filename, bytes, true, false, false);
-
-        if (typeof this.setExternalFile !== "function") {
-          throw new Error("MediaPipe BaseOptions file registration is unavailable in this runtime.");
-        }
-        this.setExternalFile(modelPath);
-
-        this.ttsPtr = await wasmModule.createTextToSpeech(
-          modelPath,
-          this.delegateType,
-          this.defaultVoiceId,
-          this.defaultLocale,
-          this.speakingRate,
-          this.targetBucket,
-          this.cacheDirectory
-        );
-        this.logger?.logSessionStart();
-      };
-    }
-
-    const tts = await api.TextToSpeech.createFromOptions(wasmFileset, {
-      baseOptions: {
-        modelAssetPath: KOKORO_MULTILINGUAL_CPU_MODEL,
-        delegate: "CPU"
-      },
-      defaultVoiceId: "af_heart",
-      speakingRate: requestedSpeed
+  if (state.supertonicLoadPromise) return state.supertonicLoadPromise;
+  elements.loadSupertonicButton.disabled = true;
+  elements.loadSupertonicButton.textContent = "Loading Supertonic 3…";
+  elements.supertonicModelStatus.textContent =
+    "Downloading about 398 MB of ONNX weights from Hugging Face, then initializing them locally. This is a first-use download.";
+  setStatus("Loading Supertonic 3 multilingual model in your browser. No speech server is used…");
+  state.supertonicLoadPromise = (async () => {
+    const { loadTextToSpeech } = await loadSupertonicHelpers();
+    const result = await loadTextToSpeech(SUPERTONIC_ONNX_BASE, {
+      executionProviders: ["wasm"],
+      graphOptimizationLevel: "all"
+    }, (modelName, current, total) => {
+      elements.supertonicModelStatus.textContent =
+        "Loading ONNX model " + current + " of " + total + ": " + modelName + ". Downloads run directly in this browser.";
+      setStatus("Loading Supertonic 3 · " + current + "/" + total + " · " + modelName + "…");
     });
-
-    const runtimeVoices = await tts.listVoices();
-    const knownIds = new Set(getCompleteVoiceCatalog().map((voice) => voice.id));
-    const ids = (Array.isArray(runtimeVoices) ? runtimeVoices : [])
-      .map((voice) => String(voice?.voiceId || voice?.voice_id || ""))
-      .filter((id) => knownIds.has(id));
-    const requiredMultilingualIds = getCompleteVoiceCatalog()
-      .map((voice) => voice.id)
-      .filter((id) => !/^[ab][fm]_/.test(id));
-    const missing = requiredMultilingualIds.filter((id) => !ids.includes(id));
-    if (missing.length) {
-      try { tts.close?.(); } catch {}
-      throw new Error("The local model loaded, but " + missing.length +
-        " multilingual voice(s) were not registered: " + missing.slice(0, 5).join(", "));
-    }
-
-    state.multilingualTts = tts;
-    state.multilingualVoiceIds = new Set(ids);
-    state.multilingualSpeed = requestedSpeed;
-    state.multilingualDelegate = "CPU";
-    state.multilingualLoadSpeed = null;
-    return tts;
+    state.supertonicTts = result.textToSpeech;
+    await loadSupertonicVoiceStyle(elements.supertonicVoiceStyleSelect.value || "M1");
+    return result.textToSpeech;
   })().then((tts) => {
-    elements.loadMultilingualButton.textContent = "54 local voices ready";
-    elements.multilingualModelStatus.textContent =
-      "Ready · all 54 Kokoro voices are available on this device. Runtime: " +
-      state.multilingualDelegate + " · speech synthesis and script text stay in this browser.";
-    elements.engineLabel.textContent = "On-device multilingual engine";
-    populateVoiceSelector(state.tts);
-    elements.generateButton.disabled = false;
-    updatePreviewButtonState();
+    elements.loadSupertonicButton.textContent = "Supertonic 3 loaded";
+    elements.supertonicModelStatus.textContent =
+      "Ready · 31 languages · 10 preset voice styles · ONNX WASM on this device. Your script stays in this browser.";
+    elements.engineLabel.textContent = "Supertonic 3 · on-device";
+    elements.speechEngineSelect.value = "supertonic";
+    setSpeechEngine();
+    setStatus("Supertonic 3 is ready. Choose a language and preset voice style to generate speech locally.", "good");
     return tts;
   }).catch((error) => {
-    state.multilingualTtsPromise = null;
-    state.multilingualLoadSpeed = null;
-    state.multilingualTts = null;
-    state.multilingualVoiceIds = new Set();
-    state.multilingualSpeed = null;
-    state.multilingualDelegate = null;
-    elements.loadMultilingualButton.disabled = false;
-    elements.loadMultilingualButton.textContent = "Retry multilingual model download";
-    elements.multilingualModelStatus.textContent =
-      "Could not load the local multilingual model: " + (error?.message || String(error));
-    setStatus("Local multilingual model failed to load: " + (error?.message || String(error)), "error");
+    state.supertonicLoadPromise = null;
+    state.supertonicTts = null;
+    state.supertonicStyles.clear();
+    state.supertonicStyle = null;
+    state.supertonicStyleName = "";
+    elements.loadSupertonicButton.disabled = false;
+    elements.loadSupertonicButton.textContent = "Retry Supertonic model load";
+    elements.supertonicModelStatus.textContent = "Could not load Supertonic 3: " + (error?.message || String(error));
+    setStatus("Supertonic 3 could not initialize: " + (error?.message || String(error)), "error");
     throw error;
+  }).finally(() => {
+    elements.loadSupertonicButton.disabled = Boolean(state.supertonicTts);
   });
-
-  return state.multilingualTtsPromise;
+  return state.supertonicLoadPromise;
 }
 
-async function loadMultilingualModel() {
-  try {
-    await getMultilingualTTS(Number(elements.speedInput.value));
-    setStatus("All 54 Kokoro voices are ready. The additional 26 voices run locally without a server.", "good");
-  } catch (error) {
-    console.error(error);
-  } finally {
-    elements.loadMultilingualButton.disabled = false;
-    updatePreviewButtonState();
+function setSpeechEngine() {
+  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
+  elements.kokoroEngineControls.hidden = supertonicSelected;
+  elements.supertonicEngineControls.hidden = !supertonicSelected;
+  elements.loadButton.hidden = supertonicSelected;
+  elements.voiceSelect.disabled = supertonicSelected || !state.tts;
+  if (supertonicSelected) {
+    elements.engineLabel.textContent = state.supertonicTts ? "Supertonic 3 · on-device" : "Supertonic 3 · not loaded";
+    elements.generateButton.disabled = !state.supertonicTts;
+    if (!state.supertonicTts) setStatus("Load the Supertonic 3 model to enable 31-language local speech.");
+  } else {
+    elements.engineLabel.textContent = "Kokoro · English · local";
+    elements.generateButton.disabled = !state.tts;
   }
+  updatePreviewButtonState();
 }
 
-function normalizeServerBaseUrl(value) {
-  const parsed = new URL(String(value || "").trim());
-  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Use an HTTP or HTTPS server URL.");
-  return parsed.origin.replace(/\/+$/, "");
-}
-
-function serverHeaders() {
-  const key = elements.serverApiKey.value.trim();
-  return key ? { "X-API-Key": key } : {};
-}
-
-async function connectServer({ silent = false } = {}) {
-  const rawUrl = elements.serverApiUrl.value.trim();
-  if (!rawUrl) {
-    state.serverReady = false;
-    state.serverVoiceIds = new Set();
-    state.serverApiBase = "";
-    elements.serverConnectionStatus.textContent = "Not connected. Add your deployed Space URL to enable multilingual voices.";
-    elements.engineLabel.textContent = "Local generation";
-    try {
-      localStorage.removeItem("nextgen-kokoro-server-url");
-    } catch {}
-    if (state.tts || elements.voiceSelect.options.length) populateVoiceSelector(state.tts);
-    elements.generateButton.disabled = !state.tts && !state.multilingualTts;
-    return false;
-  }
-
-  elements.connectServerButton.disabled = true;
-  elements.connectServerButton.textContent = "Connecting…";
-  elements.serverConnectionStatus.textContent = "Checking multilingual engine…";
-  try {
-    const baseUrl = normalizeServerBaseUrl(rawUrl);
-    const headers = serverHeaders();
-    const healthResponse = await fetch(baseUrl + "/health", { headers });
-    if (!healthResponse.ok) throw new Error("Health check returned HTTP " + healthResponse.status + ".");
-    const health = await healthResponse.json();
-    if (health.status !== "ready") throw new Error("The server has not finished loading its Kokoro model.");
-    const voicesResponse = await fetch(baseUrl + "/v1/voices", { headers });
-    if (!voicesResponse.ok) throw new Error("Voice catalogue returned HTTP " + voicesResponse.status + ".");
-    const payload = await voicesResponse.json();
-    const knownIds = new Set(getCompleteVoiceCatalog().map((voice) => voice.id));
-    const ids = (Array.isArray(payload.voices) ? payload.voices : [])
-      .map((voice) => String(voice?.id || ""))
-      .filter((id) => knownIds.has(id));
-    state.serverVoiceIds = new Set(ids);
-    const multilingualCount = ids.filter((id) =>
-      !state.supportedVoiceIds.has(id) && !state.multilingualVoiceIds.has(id)
-    ).length;
-    if (!multilingualCount) throw new Error("The server did not report any additional multilingual voices.");
-    state.serverApiBase = baseUrl;
-    state.serverReady = true;
-    try {
-      localStorage.setItem("nextgen-kokoro-server-url", baseUrl);
-    } catch {}
-    elements.serverConnectionStatus.textContent =
-      "Connected · " + multilingualCount + " multilingual voices ready · " + (health.device || "server");
-    elements.engineLabel.textContent = "Local + multilingual engine";
-    populateVoiceSelector(state.tts);
-    elements.generateButton.disabled = false;
-    if (!silent) setStatus("Multilingual engine connected. Server-enabled voices can now be selected.", "good");
-    return true;
-  } catch (error) {
-    state.serverReady = false;
-    state.serverVoiceIds = new Set();
-    state.serverApiBase = "";
-    elements.serverConnectionStatus.textContent = "Connection failed: " + (error?.message || String(error));
-    elements.engineLabel.textContent = "Local generation";
-    if (state.tts || elements.voiceSelect.options.length) populateVoiceSelector(state.tts);
-    elements.generateButton.disabled = !state.tts && !state.multilingualTts;
-    if (!silent) setStatus("Could not connect to the multilingual engine: " + (error?.message || String(error)), "error");
-    return false;
-  } finally {
-    elements.connectServerButton.disabled = false;
-    elements.connectServerButton.textContent = "Connect / refresh";
-  }
-}
 async function loadModel() {
   if (state.tts) {
     setBadge("Model ready", "ready");
@@ -566,24 +398,13 @@ async function loadModel() {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus(
-      state.serverReady
-        ? "Browser model ready. English voices run locally; multilingual voices run on your connected server."
-        : "English voices are ready locally. Load the additional multilingual model below to unlock 26 more voices without a server.",
-      "good"
-    );
+    setStatus("The 28 English Kokoro voices are ready locally. Choose Supertonic 3 for separate on-device multilingual speech.", "good");
     elements.generateButton.disabled = false;
     setProgress(100);
   } catch (error) {
     console.error(error);
     setBadge("Model load failed", "error");
-    if (state.serverReady) {
-      populateVoiceSelector(null);
-      elements.generateButton.disabled = false;
-      setStatus("The browser model could not load, but your connected multilingual server is available.", "good");
-    } else {
-      setStatus("Could not load the voice model: " + (error?.message || String(error)) + ". Check your connection and try again.", "error");
-    }
+    setStatus("Could not load the English Kokoro model: " + (error?.message || String(error)) + ". Check your connection and try again.", "error");
     setProgress(0);
   } finally {
     const ready = Boolean(state.tts);
@@ -671,109 +492,72 @@ async function generateSpeechBlob(tts, text, options, outputFormat, signal) {
   return createWavBlobFromSamples(combined, sampleRate);
 }
 
-async function generateMultilingualSpeechBlob(text, voice, speed, outputFormat, signal) {
-  const tts = await getMultilingualTTS(speed);
-  throwIfAborted(signal);
-  const cancelSynthesis = () => {
-    try { tts.cancel?.(); } catch {}
-  };
-  signal?.addEventListener("abort", cancelSynthesis, { once: true });
-  try {
-    const result = await tts.synthesize(text, { voiceId: voice });
-    throwIfAborted(signal);
-    const samples = result?.samples instanceof Float32Array
-      ? result.samples
-      : Float32Array.from(result?.samples || []);
-    const sampleRate = Number(result?.sampleRateHz || result?.sample_rate_hz || 24000);
-    if (!samples.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
-      throw new Error("The local multilingual engine returned an empty or unsupported audio result.");
-    }
-    if (outputFormat === "mp3") return await createMp3BlobFromSamples(samples, sampleRate);
-    return createWavBlobFromSamples(samples, sampleRate);
-  } finally {
-    signal?.removeEventListener("abort", cancelSynthesis);
-  }
-}
-
-async function generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal) {
-  if (!state.serverReady || !state.serverApiBase) {
-    throw new Error("The multilingual server is not connected. Connect or refresh it, then try again.");
-  }
-  const response = await fetch(state.serverApiBase + "/v1/audio/speech", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...serverHeaders() },
-    body: JSON.stringify({ input: text, voice, speed }),
-    signal
-  });
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error("Multilingual server returned HTTP " + response.status + (detail ? ": " + detail : ""));
-  }
-  const wavBlob = await response.blob();
-  if (wavBlob.size <= 44 || !wavBlob.type.includes("audio")) {
-    throw new Error("The multilingual server returned an empty or unsupported audio file.");
-  }
-  if (outputFormat === "wav") return wavBlob;
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) throw new Error("This browser cannot convert server WAV audio to MP3.");
-  const context = new AudioContextClass();
-  try {
-    const decoded = await context.decodeAudioData(await wavBlob.arrayBuffer());
-    return await createMp3BlobFromSamples(new Float32Array(decoded.getChannelData(0)), decoded.sampleRate);
-  } finally {
-    await context.close();
-  }
-}
 
 async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat, signal) {
   throwIfAborted(signal);
-  if (state.multilingualVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice)) {
-    return generateMultilingualSpeechBlob(text, voice, speed, outputFormat, signal);
-  }
-  if (state.serverVoiceIds.has(voice) &&
-      !state.supportedVoiceIds.has(voice) && !state.multilingualVoiceIds.has(voice)) {
-    return generateRemoteSpeechBlob(text, voice, speed, outputFormat, signal);
-  }
   return generateSpeechBlob(tts, text, { voice, speed }, outputFormat, signal);
+}
+
+async function generateSupertonicSpeechBlob(text, language, styleName, speed, outputFormat, signal) {
+  if (!state.supertonicTts) throw new Error("Load Supertonic 3 before generating multilingual speech.");
+  const style = await loadSupertonicVoiceStyle(styleName);
+  throwIfAborted(signal);
+  const result = await state.supertonicTts.call(
+    text, language, style, 8, speed, 0.3,
+    (step, total) => {
+      throwIfAborted(signal);
+      setStatus("Supertonic 3 · denoising step " + step + " of " + total + " · " + language.toUpperCase() + "…");
+    }
+  );
+  throwIfAborted(signal);
+  const sampleRate = Number(state.supertonicTts.sampleRate);
+  const duration = Number(result.duration?.[0] || 0);
+  const sampleCount = Math.max(0, Math.floor(sampleRate * duration));
+  const samples = Float32Array.from((result.wav || []).slice(0, sampleCount));
+  if (!samples.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new Error("Supertonic 3 returned an empty or invalid audio result.");
+  }
+  if (outputFormat === "mp3") return createMp3BlobFromSamples(samples, sampleRate);
+  return createWavBlobFromSamples(samples, sampleRate);
 }
 
 async function previewSelectedVoice() {
   if (state.isGenerating || state.isPreviewing) return;
-  const voice = elements.voiceSelect.value;
+  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
+  const sample = elements.scriptInput.value.trim().slice(0, 160);
+  if (supertonicSelected && !sample) {
+    setStatus("Enter a short sample in the selected language before previewing a Supertonic style.", "error");
+    return;
+  }
+  const voice = supertonicSelected ? elements.supertonicVoiceStyleSelect.value : elements.voiceSelect.value;
   if (!voice) return;
-
   const controller = new AbortController();
   state.previewController = controller;
   state.isPreviewing = true;
   elements.previewVoiceButton.disabled = true;
   elements.previewVoiceButton.textContent = "Generating preview…";
-
   try {
-    const localMultilingualVoice = state.multilingualVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
-    const remoteVoice = state.serverVoiceIds.has(voice) &&
-      !state.supportedVoiceIds.has(voice) && !state.multilingualVoiceIds.has(voice);
-    const tts = localMultilingualVoice
-      ? await getMultilingualTTS(Number(elements.speedInput.value))
-      : remoteVoice ? null : (state.tts || await getTTS());
-    const blob = await generateSelectedSpeechBlob(
-      tts, PREVIEW_TEXT, voice, Number(elements.speedInput.value), "wav", controller.signal
-    );
+    const tts = supertonicSelected ? null : (state.tts || await getTTS());
+    const blob = supertonicSelected
+      ? await generateSupertonicSpeechBlob(sample, elements.supertonicLanguageSelect.value, voice,
+        Number(elements.speedInput.value), "wav", controller.signal)
+      : await generateSelectedSpeechBlob(tts, PREVIEW_TEXT, voice,
+        Number(elements.speedInput.value), "wav", controller.signal);
     throwIfAborted(controller.signal);
-
     if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
     state.previewObjectUrl = URL.createObjectURL(blob);
     elements.voicePreviewAudio.src = state.previewObjectUrl;
     elements.voicePreviewAudio.hidden = false;
-    try {
-      await elements.voicePreviewAudio.play();
-    } catch {
-      // The preview remains ready in the audio player when autoplay is blocked.
-    }
-    setStatus("Voice preview ready: " + voice + ". Try another voice to compare.", "good");
+    try { await elements.voicePreviewAudio.play(); } catch {}
+    setStatus(
+      supertonicSelected
+        ? "Supertonic preview ready: " + voice + " · " + elements.supertonicLanguageSelect.value.toUpperCase() + "."
+        : "Voice preview ready: " + voice + ". Try another voice to compare.",
+      "good"
+    );
   } catch (error) {
-    if (error?.name === "AbortError") {
-      setStatus("Voice preview stopped.", "normal");
-    } else {
+    if (error?.name === "AbortError") setStatus("Voice preview stopped.", "normal");
+    else {
       console.error(error);
       setStatus("Could not preview this voice: " + (error?.message || String(error)), "error");
     }
@@ -867,6 +651,14 @@ async function generateAudio() {
     setStatus(validation.message, "error");
     return;
   }
+  const supertonicSelected = elements.speechEngineSelect.value === "supertonic";
+  const selectedVoice = supertonicSelected ? elements.supertonicVoiceStyleSelect.value : (elements.voiceSelect.value || "af_heart");
+  const speed = Number(elements.speedInput.value);
+  const language = elements.supertonicLanguageSelect.value;
+  if (supertonicSelected && !state.supertonicTts) {
+    setStatus("Load Supertonic 3 before generating multilingual speech.", "error");
+    return;
+  }
 
   clearResults();
   const controller = new AbortController();
@@ -877,8 +669,12 @@ async function generateAudio() {
   elements.previewVoiceButton.disabled = true;
   elements.generateButton.disabled = true;
   elements.loadButton.disabled = true;
+  elements.speechEngineSelect.disabled = true;
   elements.scriptInput.disabled = true;
   elements.voiceSelect.disabled = true;
+  elements.supertonicLanguageSelect.disabled = true;
+  elements.supertonicVoiceStyleSelect.disabled = true;
+  elements.loadSupertonicButton.disabled = true;
   elements.speedInput.disabled = true;
   elements.outputFormat.disabled = true;
   setProgress(1);
@@ -887,28 +683,25 @@ async function generateAudio() {
   const outputFormat = elements.outputFormat.value;
   const extension = outputFormat === "mp3" ? "mp3" : "wav";
   const scriptForSpeech = validation.paragraphs.join("\n\n");
-
+  let tts = state.tts;
   try {
-    const voice = elements.voiceSelect.value || "af_heart";
-    const speed = Number(elements.speedInput.value);
-    const useLocalMultilingual = state.multilingualVoiceIds.has(voice) && !state.supportedVoiceIds.has(voice);
-    const useServer = state.serverReady && state.serverVoiceIds.has(voice) &&
-      !state.supportedVoiceIds.has(voice) && !state.multilingualVoiceIds.has(voice);
-    let tts = state.tts;
-    if (useLocalMultilingual) {
-      tts = await getMultilingualTTS(speed);
-    } else if (!useServer) {
+    if (supertonicSelected) {
+      await loadSupertonicVoiceStyle(selectedVoice);
+    } else {
       tts = tts || await getTTS();
       if (elements.voiceSelect.options.length === 0) populateVoiceSelector(tts);
       setBadge("Model ready", "ready");
-      if (!state.supportedVoiceIds.has(voice)) {
-        throw new Error("Voice " + voice + " is not available in a loaded local or connected speech engine.");
+      if (!state.supportedVoiceIds.has(selectedVoice)) {
+        throw new Error("Kokoro voice " + selectedVoice + " is not in the 28 supported English voices.");
       }
     }
     if (outputFormat === "mp3") {
       setStatus("Preparing the MP3 encoder…");
       await getLameJS();
     }
+    const renderSpeech = (speechText) => supertonicSelected
+      ? generateSupertonicSpeechBlob(speechText, language, selectedVoice, speed, outputFormat, controller.signal)
+      : generateSelectedSpeechBlob(tts, speechText, selectedVoice, speed, outputFormat, controller.signal);
     const jobCount = validation.paragraphs.length + (validation.paragraphs.length > 1 ? 1 : 0);
     let completedJobs = 0;
 
@@ -916,23 +709,16 @@ async function generateAudio() {
       const paragraphNumber = index + 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
       setStatus("Generating paragraph " + paragraphNumber + " of " + validation.paragraphs.length +
-        (useLocalMultilingual ? " on this device…" : useServer ? " on the multilingual server…" : "…"));
+        (supertonicSelected ? " locally with Supertonic 3 · " + language.toUpperCase() + "…" : " locally with Kokoro…"));
       await new Promise((resolve) => setTimeout(resolve, 0));
-
-      const audioBlob = await generateSelectedSpeechBlob(
-        tts, validation.paragraphs[index], voice, speed, outputFormat, controller.signal
-      );
+      const audioBlob = await renderSpeech(validation.paragraphs[index]);
       throwIfAborted(controller.signal);
       outputBlobs.push(audioBlob);
       const filename = "paragraph_" + String(paragraphNumber).padStart(3, "0") + "." + extension;
       addAudioResult({
         title: "Paragraph " + paragraphNumber,
         subtitle: validation.paragraphs[index].slice(0, 110) + (validation.paragraphs[index].length > 110 ? "…" : ""),
-        filename,
-        blob: audioBlob,
-        kind: "paragraph",
-        index: paragraphNumber,
-        outputFormat
+        filename, blob: audioBlob, kind: "paragraph", index: paragraphNumber, outputFormat
       });
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
@@ -940,26 +726,22 @@ async function generateAudio() {
 
     let fullScriptBlob;
     if (outputBlobs.length === 1) {
-      // A one-paragraph script is already the complete voiceover; reuse its audio.
       fullScriptBlob = outputBlobs[0];
     } else {
       setStatus("Generating one continuous voiceover for the complete script…");
       await new Promise((resolve) => setTimeout(resolve, 0));
-      fullScriptBlob = await generateSelectedSpeechBlob(
-        tts, scriptForSpeech, voice, speed, outputFormat, controller.signal
-      );
+      fullScriptBlob = await renderSpeech(scriptForSpeech);
       throwIfAborted(controller.signal);
       completedJobs += 1;
       setProgress(5 + (completedJobs / jobCount) * 88);
     }
-
+    const engineSubtitle = supertonicSelected
+      ? "Supertonic 3 · " + selectedVoice + " · " + language.toUpperCase()
+      : "Kokoro · " + selectedVoice;
     addAudioResult({
       title: "Full script voiceover",
-      subtitle: validation.paragraphs.length + " paragraph(s) · " + voice + " · " + speed.toFixed(2) + "×",
-      filename: "full_script." + extension,
-      blob: fullScriptBlob,
-      kind: "full",
-      outputFormat
+      subtitle: validation.paragraphs.length + " paragraph(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×",
+      filename: "full_script." + extension, blob: fullScriptBlob, kind: "full", outputFormat
     });
 
     setStatus("Packaging the full-script and paragraph " + formatLabel(outputFormat) + " files…");
@@ -971,9 +753,7 @@ async function generateAudio() {
     }
     zip.file("full_script." + extension, fullScriptBlob);
     const zipBlob = await zip.generateAsync({
-      type: "blob",
-      compression: "DEFLATE",
-      compressionOptions: { level: 3 }
+      type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 }
     });
     const zipUrl = URL.createObjectURL(zipBlob);
     state.objectUrls.push(zipUrl);
@@ -981,16 +761,19 @@ async function generateAudio() {
     elements.zipDownload.hidden = false;
     elements.resultsPanel.hidden = false;
     elements.resultsSummary.textContent =
-      "Full script voiceover + " + validation.paragraphs.length + " paragraph " + formatLabel(outputFormat) + " file(s) · " + voice + " · " + speed.toFixed(2) + "×";
+      "Full script voiceover + " + validation.paragraphs.length + " paragraph " +
+      formatLabel(outputFormat) + " file(s) · " + engineSubtitle + " · " + speed.toFixed(2) + "×";
     setProgress(100);
-    setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete " + formatLabel(outputFormat) + " bundle.", "good");
+    setStatus("Voiceover complete. Preview or download the full script, individual paragraphs, or the complete " +
+      formatLabel(outputFormat) + " bundle.", "good");
   } catch (error) {
     if (controller.signal.aborted || error?.name === "AbortError") {
       setStatus("Generation stopped. Completed paragraph audio remains available below.", "normal");
     } else {
       console.error(error);
       setProgress(0);
-      setStatus("Generation failed: " + (error?.message || String(error)) + " Any completed paragraph audio remains available below.", "error");
+      setStatus("Generation failed: " + (error?.message || String(error)) +
+        " Any completed paragraph audio remains available below.", "error");
     }
     elements.resultsPanel.hidden = elements.audioResults.childElementCount === 0;
   } finally {
@@ -998,12 +781,15 @@ async function generateAudio() {
     state.activeAbortController = null;
     elements.cancelButton.hidden = true;
     elements.cancelButton.disabled = true;
-    elements.generateButton.disabled = !state.tts && !state.serverReady && !state.multilingualTts;
-    elements.loadButton.disabled = Boolean(state.tts);
+    elements.speechEngineSelect.disabled = false;
     elements.scriptInput.disabled = false;
-    elements.voiceSelect.disabled = !state.tts && !state.serverReady && !state.multilingualTts;
     elements.speedInput.disabled = false;
     elements.outputFormat.disabled = false;
+    elements.supertonicLanguageSelect.disabled = false;
+    elements.supertonicVoiceStyleSelect.disabled = false;
+    elements.loadSupertonicButton.disabled = Boolean(state.supertonicTts);
+    elements.loadButton.disabled = Boolean(state.tts);
+    setSpeechEngine();
     updatePreviewButtonState();
   }
 }
@@ -1019,7 +805,6 @@ elements.previewVoiceButton.addEventListener("click", previewSelectedVoice);
 elements.cancelButton.addEventListener("click", () => {
   if (!state.activeAbortController) return;
   state.activeAbortController.abort();
-  try { state.multilingualTts?.cancel?.(); } catch {}
   elements.cancelButton.disabled = true;
   setStatus("Stopping after the current speech chunk…");
 });
@@ -1031,9 +816,28 @@ elements.speedInput.addEventListener("input", () => {
 });
 
 elements.loadButton.addEventListener("click", loadModel);
-elements.loadMultilingualButton.addEventListener("click", loadMultilingualModel);
+elements.loadSupertonicButton.addEventListener("click", () => void loadSupertonicModel().catch(console.error));
+elements.speechEngineSelect.addEventListener("change", setSpeechEngine);
+elements.supertonicVoiceStyleSelect.addEventListener("change", async () => {
+  if (!state.supertonicTts) {
+    updatePreviewButtonState();
+    return;
+  }
+  elements.previewVoiceButton.disabled = true;
+  elements.supertonicModelStatus.textContent = "Loading preset voice style " + elements.supertonicVoiceStyleSelect.value + "…";
+  try {
+    await loadSupertonicVoiceStyle(elements.supertonicVoiceStyleSelect.value);
+    elements.supertonicModelStatus.textContent =
+      "Ready · Supertonic 3 · " + elements.supertonicVoiceStyleSelect.value + " · 31 languages · local ONNX WASM.";
+    setStatus("Supertonic voice style ready: " + elements.supertonicVoiceStyleSelect.value + ".", "good");
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not load this Supertonic preset: " + (error?.message || String(error)), "error");
+  } finally {
+    updatePreviewButtonState();
+  }
+});
 elements.generateButton.addEventListener("click", generateAudio);
-elements.connectServerButton.addEventListener("click", () => void connectServer());
 
 elements.clearButton.addEventListener("click", () => {
   elements.scriptInput.value = "";
@@ -1046,6 +850,7 @@ elements.clearButton.addEventListener("click", () => {
 
 restoreDraftLocally();
 updateScriptCounts();
+setSpeechEngine();
 
 window.addEventListener("beforeunload", () => {
   revokeObjectUrls();
@@ -1063,13 +868,6 @@ if (!window.isSecureContext && location.hostname !== "localhost" && location.hos
     } catch (error) {
       console.info("Persistent browser storage was not granted.", error);
     }
-    try {
-      elements.serverApiUrl.value = localStorage.getItem("nextgen-kokoro-server-url") || "";
-    } catch {
-      elements.serverApiUrl.value = "";
-    }
-    elements.serverApiKey.value = "";
-    if (elements.serverApiUrl.value) await connectServer({ silent: true });
     await loadModel();
   }
   if (document.readyState === "complete") {
