@@ -470,11 +470,14 @@ function revokeObjectUrls() {
 
 function clearResults() {
   revokeObjectUrls();
+  state.generatedParagraphBlobs = [];
+  state.fullScriptBlob = null;
   elements.audioResults.replaceChildren();
   elements.zipDownload.hidden = true;
   elements.zipDownload.removeAttribute("href");
   elements.resultsSummary.textContent = "Your audio files will appear here.";
   elements.resultsPanel.hidden = true;
+  updateParagraphEditorControls();
 }
 
 function updateScriptCounts() {
@@ -591,6 +594,7 @@ function renderVoiceSelector() {
   elements.voiceSelect.disabled = filteredVoices.length === 0;
   elements.voiceHelp.textContent = filteredVoices.length + " of 28 English voices shown · American and British accents · generated locally.";
   updateRecentVoiceLabel();
+  renderParagraphEditor();
   updatePreviewButtonState();
 }
 
@@ -598,6 +602,7 @@ function populateVoiceSelector(tts = null) {
   state.voiceCatalog = normalizeVoiceCatalog(tts?.voices ?? []);
   state.supportedVoiceIds = new Set(state.voiceCatalog.map((voice) => voice.id));
   renderVoiceSelector();
+  renderParagraphEditor();
 }
 
 function updatePronunciationStatus() {
@@ -684,6 +689,7 @@ function setSpeed(value) {
   }
   clearResults();
   clearBenchmarkResults();
+  renderParagraphEditor();
 }
 
 async function loadModel() {
@@ -1230,6 +1236,7 @@ async function generateAudio() {
 }
 
 elements.scriptInput.addEventListener("input", () => {
+  syncParagraphsFromScript();
   updateScriptCounts();
   saveDraftLocally();
   updateSpokenTextPreview();
@@ -1239,9 +1246,13 @@ elements.scriptInput.addEventListener("input", () => {
 elements.voiceSelect.addEventListener("change", () => {
   rememberRecentVoice(elements.voiceSelect.value);
   clearResults();
+  renderParagraphEditor();
   updatePreviewButtonState();
 });
 elements.favoriteVoiceButton.addEventListener("click", toggleFavoriteVoice);
+elements.paragraphEditorList.addEventListener("input", handleParagraphEditorInput);
+elements.paragraphEditorList.addEventListener("change", handleParagraphEditorChange);
+elements.paragraphEditorList.addEventListener("click", handleParagraphEditorAction);
 elements.voiceFilterSelect.addEventListener("change", () => {
   renderVoiceSelector();
   clearResults();
@@ -1289,6 +1300,9 @@ elements.generateButton.addEventListener("click", generateAudio);
 
 elements.clearButton.addEventListener("click", () => {
   elements.scriptInput.value = "";
+  state.paragraphs = [];
+  persistParagraphSettings();
+  renderParagraphEditor();
   saveDraftLocally();
   updateScriptCounts();
   clearResults();
@@ -1300,7 +1314,9 @@ restoreDraftLocally();
 restorePronunciationRules();
 restoreSpokenTextPreference();
 restoreVoicePreferences();
+restoreParagraphSettings();
 updateScriptCounts();
+renderParagraphEditor();
 updateSpokenTextPreview();
 setSpeed(elements.speedInput.value);
 
