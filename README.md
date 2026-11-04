@@ -13,6 +13,9 @@ The app restores the model automatically and enables browser caching. The first 
 - **Voice discovery:** filter the 28 voices by American English, British English, female or male, then preview the selected voice.
 - **Pronunciation guide:** add one replacement per line, such as `OpenAI = Open A I` or `SQL = sequel`. Matching is case-insensitive and respects word/phrase boundaries. Replacements apply to the audio input only; the original script is preserved. Rules are saved locally in the current browser.
 - **Speaking pace:** use Relaxed (0.90×), Natural (1.00×), Brisk (1.15×), or set a custom speed from 0.50× to 2.00×.
+- **Smart spoken-text cleanup:** optionally read common dates, years, numbers, percentages, currencies, measurements, times and common initialisms aloud. This changes only the speech input; the original draft remains intact. Custom pronunciation rules are applied first.
+- **Voice comparison bench:** generate the same short script as a WAV with each of the 28 American and British voices, audition the results, and download individual samples. Includes balanced, creator-style and technical benchmark scripts.
+- **Narration pacing:** speech is streamed paragraph by paragraph, with a longer pause between paragraphs and a shorter pause between streamed chunks.
 - **Script workflow:** up to 20,000 characters and 100 paragraphs, with each paragraph rendered separately plus one continuous full-script voiceover.
 - **Exports:** WAV or MP3, individual paragraph files, full-script audio and one ZIP bundle.
 - **Draft recovery:** the script and pronunciation rules are saved locally in the current browser profile.
