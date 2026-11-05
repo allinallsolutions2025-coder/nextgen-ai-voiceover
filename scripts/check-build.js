@@ -114,7 +114,7 @@ if (!html.includes('value="american"') || !html.includes('value="british"') ||
     !html.includes('value="female"') || !html.includes('value="male"')) {
   throw new Error("Accent and gender voice filters are required.");
 }
-if (!main.includes('import("lamejs")') || !main.includes('import("jszip")') || !main.includes("createMp3BlobFromSamples")) throw new Error("Bundled MP3 and ZIP export support is missing.");
+if (!main.includes('import("@breezystack/lamejs")') || !main.includes('import("jszip")') || !main.includes("createMp3BlobFromSamples")) throw new Error("Bundled MP3 and ZIP export support is missing.");
 if (!html.includes('id="outputFormat"') || !html.includes('value="mp3"')) throw new Error("A user-selectable output format is required.");
 const backendApp = await readFile(new URL("../backend/app.py", import.meta.url), "utf8");
 const backendCatalog = await readFile(new URL("../backend/voice_catalog.py", import.meta.url), "utf8");
@@ -201,10 +201,10 @@ if (capacitorConfig.webDir !== "dist" || !packageJson.dependencies?.["@capacitor
 }
 if (!main.includes("PACKAGED_RUNTIME") || !main.includes("allowRemoteModels = false") ||
     !main.includes('localModelPath = new URL("../models/", import.meta.url).href') ||
-    !main.includes('new URL("../ort/", import.meta.url).href')) {
+    !main.includes('module.env.wasmPaths = new URL("../ort/", import.meta.url).href')) {
   throw new Error("Packaged native apps must load the local Kokoro model and local ONNX Runtime WASM.");
 }
-if (!packageJson.scripts?.["build:offline"] || !packageJson.scripts?.["desktop:package"] ||
+if (!packageJson.dependencies?.["@breezystack/lamejs"] || packageJson.dependencies?.lamejs || !packageJson.scripts?.["build:offline"] || !packageJson.scripts?.["desktop:package"] ||
     !packageJson.scripts?.["android:sync"] || !packageJson.build?.win ||
     !packageJson.build?.mac || !packageJson.build?.linux) {
   throw new Error("Cross-platform desktop and Android build scripts are incomplete.");
