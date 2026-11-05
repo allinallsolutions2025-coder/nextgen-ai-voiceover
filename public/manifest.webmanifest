@@ -1,0 +1,22 @@
+{
+  "id": "./",
+  "name": "NextGen AI Voiceover",
+  "short_name": "NextGen Voiceover",
+  "description": "Create natural American and British English voiceovers on your device.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7fb",
+  "theme_color": "#f4f7fb",
+  "categories": ["productivity", "multimedia", "utilities"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
