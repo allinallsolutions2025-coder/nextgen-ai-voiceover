@@ -647,7 +647,7 @@ function renderVoiceSelector() {
   const preferred = filteredVoices.find((voice) => voice.id === "af_heart")?.id || filteredVoices[0]?.id || "";
   elements.voiceSelect.value = preserved?.id || preferred;
   elements.voiceSelect.disabled = filteredVoices.length === 0;
-  elements.voiceHelp.textContent = filteredVoices.length + " of 28 English voices shown · American and British accents · generated locally.";
+  elements.voiceHelp.textContent = filteredVoices.length + " of 28 voices shown · American and British accents.";
   updateRecentVoiceLabel();
   renderParagraphEditor();
   updatePreviewButtonState();
