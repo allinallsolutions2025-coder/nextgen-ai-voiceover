@@ -3,8 +3,18 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - "v*"
+    paths:
+      - ".github/workflows/build-android.yml"
+      - "package.json"
+      - "vite.config.js"
+      - "src/**"
+      - "scripts/download-model.js"
+      - "scripts/copy-ort-assets.js"
+      - "scripts/generate-pwa-icons.js"
+      - "capacitor.config.json"
 
 permissions:
   contents: read
