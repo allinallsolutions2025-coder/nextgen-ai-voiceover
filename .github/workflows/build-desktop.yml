@@ -67,10 +67,31 @@ jobs:
         if: matrix.platform == 'linux'
         run: npx electron-builder --linux AppImage deb --x64 --publish never
 
-      - name: Upload installer artifacts
+      - name: Upload Windows installer
+        if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: nextgen-ai-voiceover-${{ matrix.platform }}
-          path: release/*
+          name: nextgen-ai-voiceover-windows
+          path: release/*-win-x64.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload macOS disk images
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-ai-voiceover-macos
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux packages
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-ai-voiceover-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
           if-no-files-found: error
           retention-days: 30
