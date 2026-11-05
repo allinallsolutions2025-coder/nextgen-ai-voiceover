@@ -5,7 +5,7 @@ const requiredFiles = [
   "public/manifest.webmanifest",
   "public/sw.js",
   "public/icon.svg",
-  "src/pwa.js",
+  "src/pwa.js",\n  "scripts/download-model-assets.js",
   "scripts/check-platform-build.js",
   "electron/main.cjs",
   "electron-builder.yml",
