@@ -22,17 +22,16 @@
     "desktop:dev": "npm run build && electron .",
     "desktop:package": "electron-builder --publish never"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@breezystack/lamejs": "1.2.7",
     "@capacitor/android": "8.6.0",
-    "@capacitor/core": "8.6.0",
-    "jszip": "3.10.1",
-    "kokoro-js": "1.2.1"
-  },
-  "devDependencies": {
     "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0",
     "electron": "45.2.3",
     "electron-builder": "26.18.1",
+    "jszip": "3.10.1",
+    "kokoro-js": "1.2.1",
     "vite": "^7.2.2"
   },
   "build": {
