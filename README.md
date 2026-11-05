@@ -32,7 +32,7 @@ GitHub Pages publishes a web app manifest, icon, and service worker. Supported d
 
 **Kokoro.js 1.2.1** runs the Kokoro-82M q8 ONNX model locally in the browser through WebAssembly. The product exposes 28 English voices: American English and British English, with female and male voices in both accent groups. Non-English Kokoro IDs are excluded from the public voice selector.
 
-The app restores the model automatically and enables browser caching. The first visit downloads the voice model and runtime assets, then prepares the 28 short voice previews in the background; later visits can reuse both the model cache and saved preview audio. No speech API key or remote speech server is needed for generation.
+The app restores the model automatically and enables browser caching. The browser version downloads the model on first use; native Windows, macOS, Linux and Android release packages include the quantized model and all 28 English voice packs locally. No speech API key or remote speech server is needed for generation.
 
 ## Studio interface
 
@@ -65,7 +65,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the phased plan covering stability, E
 
 ## Privacy and storage
 
-Speech synthesis runs locally in the browser. Your script and pronunciation replacements are not sent to a speech server. Model/runtime assets are downloaded from their distribution sources and cached by the local browser engine. Desktop and Android wrappers use that same app cache after first launch. Local drafts are not synced between browsers or devices.
+Speech synthesis runs locally in the browser. Your script and pronunciation replacements are not sent to a speech server. Scripts are processed locally. Native installers bundle the model, voice packs, JavaScript runtime and WASM assets; the browser PWA caches its runtime locally and downloads the model on first use. Local drafts are not synced between browsers or devices.
 
 ## Run locally
 
@@ -100,7 +100,7 @@ GitHub Pages publishes only `dist/`; backend files, tests and workflow files rem
 
 ## Current limitations
 
-- The current Windows/macOS/Linux and Android wrappers do not yet embed the model in their installers; the first model load requires internet access. See the cross-platform release guide.\n- No accounts, billing, cloud-synced history or server-side usage enforcement.
+- The regular web/PWA build downloads the model on first use; native releases include model and voice assets locally. See the cross-platform release guide.\n- No accounts, billing, cloud-synced history or server-side usage enforcement.
 - Browser cache may be cleared or evicted by the browser, requiring model files to be downloaded again.
 - Speed and custom text pronunciation are supported; pitch, emotion and voice-cloning controls are not.
 - The 28-voice product catalogue is English-only (American and British English).
