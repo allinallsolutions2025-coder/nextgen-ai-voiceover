@@ -1,0 +1,37 @@
+appId: com.nextgen.voiceover
+productName: NextGen AI Voiceover
+directories:
+  output: release
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+extraMetadata:
+  main: electron/main.cjs
+asar: true
+npmRebuild: false
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+linux:
+  category: AudioVideo
+  target:
+    - target: AppImage
+      arch:
+        - x64
