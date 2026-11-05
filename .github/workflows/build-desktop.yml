@@ -76,22 +76,38 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload macOS disk images
+      - name: Upload macOS Apple Silicon disk image
         if: matrix.platform == 'macos'
         uses: actions/upload-artifact@v4
         with:
-          name: nextgen-ai-voiceover-macos
-          path: release/*.dmg
+          name: nextgen-ai-voiceover-macos-arm64
+          path: release/*-mac-arm64.dmg
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload Linux packages
+      - name: Upload macOS Intel disk image
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-ai-voiceover-macos-x64
+          path: release/*-mac-x64.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux AppImage
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
-          name: nextgen-ai-voiceover-linux
-          path: |
-            release/*.AppImage
-            release/*.deb
+          name: nextgen-ai-voiceover-linux-appimage
+          path: release/*.AppImage
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux Debian package
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-ai-voiceover-linux-deb
+          path: release/*.deb
           if-no-files-found: error
           retention-days: 30
