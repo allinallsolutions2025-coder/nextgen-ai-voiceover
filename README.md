@@ -8,6 +8,12 @@ An English-first, browser-based text-to-speech studio powered by Kokoro. It focu
 
 The app restores the model automatically and enables browser caching. The first visit downloads the voice model and runtime assets; later visits can reuse the browser cache. No speech API key or remote speech server is needed for generation.
 
+## Studio interface
+
+The desktop workspace is optimized for common Windows browser sizes, including 1366 × 768 and 1920 × 1080. A compact header replaces the older left sidebar, with the script editor and voice setup arranged side by side. On smaller screens the workspace stacks into one column. Less-used speech and export controls are grouped under **Speech & export options** so the main voice controls stay visible.
+
+The interface uses a light slate-and-blue professional theme with larger, readable control labels and a simplified navigation area.
+
 ## Voiceover controls
 
 - **Voice discovery:** filter the 28 voices by American English, British English, female, male or saved favorites. Favorite voices and the five most recently selected voices are remembered locally.
