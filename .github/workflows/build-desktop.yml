@@ -55,9 +55,8 @@ jobs:
         run: |
           npm run check
           npm test
-          npm run build
 
-      - name: Build installer
+      - name: Build installer with bundled English model
         run: npm run dist:desktop
 
       - name: Upload installer
