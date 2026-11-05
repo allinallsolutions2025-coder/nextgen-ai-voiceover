@@ -30,9 +30,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
-      - name: Check JavaScript syntax
+      - name: Check JavaScript syntax and platform setup
         run: npm run check
 
       - name: Run unit tests
@@ -57,6 +57,10 @@ jobs:
           test -s dist/src/main.js
           test -s dist/src/lib/voice-catalog.js
           test -s dist/src/styles.css
+          test -s dist/manifest.webmanifest
+          test -s dist/sw.js
+          test -s dist/icon.svg
+          test ! -e dist/ios
           test -f dist/.nojekyll
           test ! -e dist/backend
           test ! -e dist/docs
