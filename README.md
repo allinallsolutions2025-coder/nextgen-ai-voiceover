@@ -1,6 +1,32 @@
 # NextGen AI Voiceover
 
-An English-first, browser-based text-to-speech studio powered by Kokoro. It focuses on natural American and British English narration rather than a multilingual voice catalogue.
+An English-first Kokoro text-to-speech studio for the web, Windows, macOS, Linux and Android. It focuses on natural American and British English narration rather than a multilingual voice catalogue.
+
+## Cross-platform installation targets
+
+The same `dist/` application build is used for:
+
+- **Windows:** NSIS `.exe` installer (x64 and ARM64).
+- **macOS:** `.dmg` installer (Intel and Apple silicon).
+- **Linux:** AppImage (x64).
+- **Android:** Capacitor Android project and debug APK.
+- **Web:** installable PWA in supported desktop and Android browsers, as well as the current GitHub Pages app.
+
+**iPhone and iPad distribution are intentionally excluded.** There is no iOS project, IPA package, App Store workflow or Apple signing configuration.
+
+Build instructions and release limitations are documented in [docs/CROSS-PLATFORM-RELEASES.md](docs/CROSS-PLATFORM-RELEASES.md).
+
+## Desktop builds
+
+Run `npm install` and `npm run start:desktop` to open the desktop wrapper. Run `npm run dist:desktop` to produce the installer for the current operating system. GitHub Actions builds each desktop platform on its native runner.
+
+## Android build
+
+Install Android Studio and JDK 21, then run `npm install` followed by `npm run android:prepare`. This generates the Android project and syncs the shared web assets. CI creates an unsigned debug APK; a signed release requires the publisher's own Android keystore.
+
+## Installable web app
+
+GitHub Pages publishes a web app manifest, icon, and service worker. Supported desktop and Android browsers can install the app, and the service worker caches its same-origin app shell for repeat/offline navigation.
 
 ## English voice engine
 
@@ -39,14 +65,14 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the phased plan covering stability, E
 
 ## Privacy and storage
 
-Speech synthesis runs locally in the browser. Your script and pronunciation replacements are not sent to a speech server. Model/runtime assets are downloaded from their distribution sources and cached by the browser. Local drafts are not synced between browsers or devices.
+Speech synthesis runs locally in the browser. Your script and pronunciation replacements are not sent to a speech server. Model/runtime assets are downloaded from their distribution sources and cached by the local browser engine. Desktop and Android wrappers use that same app cache after first launch. Local drafts are not synced between browsers or devices.
 
 ## Run locally
 
 Use Node.js 24 or later:
 
 ```bash
-npm ci
+npm install
 npm run check
 npm test
 npm run build
@@ -74,7 +100,7 @@ GitHub Pages publishes only `dist/`; backend files, tests and workflow files rem
 
 ## Current limitations
 
-- No accounts, billing, cloud-synced history or server-side usage enforcement.
+- The current Windows/macOS/Linux and Android wrappers do not yet embed the model in their installers; the first model load requires internet access. See the cross-platform release guide.\n- No accounts, billing, cloud-synced history or server-side usage enforcement.
 - Browser cache may be cleared or evicted by the browser, requiring model files to be downloaded again.
 - Speed and custom text pronunciation are supported; pitch, emotion and voice-cloning controls are not.
 - The 28-voice product catalogue is English-only (American and British English).
