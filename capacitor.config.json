@@ -1,0 +1,12 @@
+{
+  "appId": "com.nextgen.voiceover",
+  "appName": "NextGen AI Voiceover",
+  "webDir": "dist",
+  "backgroundColor": "#f4f7fb",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
