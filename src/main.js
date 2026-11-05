@@ -582,9 +582,9 @@ async function getTTS() {
         module.env.useWasmCache = true;
         module.env.allowLocalModels = true;
         module.env.localModelPath = new URL("../models/", import.meta.url).href;
-        if (module.env.backends?.onnx?.wasm) {
-          module.env.backends.onnx.wasm.wasmPaths = new URL("../ort/", import.meta.url).href;
-        }
+        // Kokoro.js exposes the supported override at env.wasmPaths.
+        // This keeps the ONNX Runtime .mjs loader and .wasm binary inside each platform package.
+        module.env.wasmPaths = new URL("../ort/", import.meta.url).href;
         // Native builds ship the model and runtime with the installer. Never fall back to the network there.
         if (PACKAGED_RUNTIME) module.env.allowRemoteModels = false;
       }
@@ -608,7 +608,7 @@ async function getTTS() {
 async function getLameJS() {
   if (window.lamejs?.Mp3Encoder) return window.lamejs;
   if (!state.lamePromise) {
-    state.lamePromise = import("lamejs").then((module) => {
+    state.lamePromise = import("@breezystack/lamejs").then((module) => {
       const encoder = module.default || module;
       window.lamejs = encoder;
       if (!window.lamejs?.Mp3Encoder && module.Mp3Encoder) window.lamejs = module;
