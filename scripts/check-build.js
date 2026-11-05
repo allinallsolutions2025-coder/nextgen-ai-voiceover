@@ -195,8 +195,9 @@ if (pwaManifest.name !== "NextGen AI Voiceover" || pwaManifest.display !== "stan
     !serviceWorker.includes("huggingface.co")) {
   throw new Error("Installable PWA metadata and offline runtime caching are required.");
 }
-if (capacitorConfig.webDir !== "dist" || !packageJson.dependencies?.["@capacitor/android"] ||
-    packageJson.dependencies?.["@capacitor/ios"]) {
+const buildDependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+if (capacitorConfig.webDir !== "dist" || !buildDependencies["@capacitor/android"] ||
+    buildDependencies["@capacitor/ios"]) {
   throw new Error("Android packaging must be configured without adding iOS distribution.");
 }
 if (!main.includes("PACKAGED_RUNTIME") || !main.includes("allowRemoteModels = false") ||
@@ -204,7 +205,7 @@ if (!main.includes("PACKAGED_RUNTIME") || !main.includes("allowRemoteModels = fa
     !main.includes('module.env.wasmPaths = new URL("../ort/", import.meta.url).href')) {
   throw new Error("Packaged native apps must load the local Kokoro model and local ONNX Runtime WASM.");
 }
-if (!packageJson.dependencies?.["@breezystack/lamejs"] || packageJson.dependencies?.lamejs || !packageJson.scripts?.["build:offline"] || !packageJson.scripts?.["desktop:package"] ||
+if (!buildDependencies["@breezystack/lamejs"] || buildDependencies.lamejs || !packageJson.scripts?.["build:offline"] || !packageJson.scripts?.["desktop:package"] ||
     !packageJson.scripts?.["android:sync"] || !packageJson.build?.win ||
     !packageJson.build?.mac || !packageJson.build?.linux) {
   throw new Error("Cross-platform desktop and Android build scripts are incomplete.");
