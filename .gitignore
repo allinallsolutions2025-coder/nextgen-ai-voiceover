@@ -7,3 +7,15 @@ dist/
 Thumbs.db
 playwright-report/
 test-results/
+
+# Generated local model/runtime assets (downloaded during offline installer builds)
+public/models/
+public/ort/
+public/icon-192.png
+public/icon-512.png
+
+# Native and packaged build outputs
+android/
+release/
+*.apk
+*.aab
