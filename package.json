@@ -3,11 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "English-first browser-based Kokoro voiceover studio for NextGen AI Voiceover",
+  "main": "electron/main.cjs",
+  "description": "English-first Kokoro voiceover studio for web, Windows, macOS, Linux and Android",
   "scripts": {
-    "check": "node --check src/main.js && node --check src/lib/text.js && node --check src/lib/pronunciation.js && node --check src/lib/voice-catalog.js && node --check src/lib/narration.js && node --check src/lib/paragraph-editor.js && node --check src/lib/subtitles.js && node --check src/lib/audio-processing.js && node --check src/lib/audio-metadata.js && node --check scripts/check-build.js && node --check scripts/build-site.js && node --check scripts/pages-smoke-test.js",
+    "check": "node --check src/main.js && node --check src/pwa.js && node --check src/lib/text.js && node --check src/lib/pronunciation.js && node --check src/lib/voice-catalog.js && node --check src/lib/narration.js && node --check src/lib/paragraph-editor.js && node --check src/lib/subtitles.js && node --check src/lib/audio-processing.js && node --check src/lib/audio-metadata.js && node --check electron/main.cjs && node --check scripts/check-build.js && node --check scripts/check-platform-build.js && node --check scripts/build-site.js && node --check scripts/pages-smoke-test.js && node scripts/check-platform-build.js",
     "test": "node --test tests/*.test.js",
-    "build": "node scripts/build-site.js"
+    "build": "node scripts/build-site.js",
+    "start:desktop": "npm run build && electron .",
+    "dist:desktop": "npm run build && electron-builder --config electron-builder.yml --publish never",
+    "android:prepare": "npm run build && cap add android && cap sync android",
+    "android:sync": "npm run build && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1"
   },
   "engines": {
     "node": ">=24"
