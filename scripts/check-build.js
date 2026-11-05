@@ -34,7 +34,8 @@ const requiredFiles = [
   "scripts/download-model.js",
   "scripts/copy-ort-assets.js",
   "scripts/validate-offline-bundle.js",
-  "scripts/validate-apk.js"
+  "scripts/validate-apk.js",
+  "scripts/offline-smoke-test.js"
 ];
 
 for (const file of requiredFiles) await access(new URL("../" + file, import.meta.url));
