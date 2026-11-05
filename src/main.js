@@ -27,6 +27,14 @@ const VOICE_PREVIEW_CACHE_VERSION = 1;
 const VOICE_PREVIEW_DB_NAME = "nextgen-voiceover-voice-previews-v1";
 const VOICE_PREVIEW_STORE_NAME = "voice-previews";
 
+if (("https:" === location.protocol || location.hostname === "localhost") &&
+    "serviceWorker" in navigator && !Capacitor.isNativePlatform()) {
+  const serviceWorkerUrl = new URL("../sw.js", import.meta.url);
+  const serviceWorkerScope = new URL("../", import.meta.url).pathname;
+  navigator.serviceWorker.register(serviceWorkerUrl, { scope: serviceWorkerScope })
+    .catch(error => console.warn("Offline app installation is unavailable in this browser:", error));
+}
+
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
   scriptInput: document.querySelector("#scriptInput"),
