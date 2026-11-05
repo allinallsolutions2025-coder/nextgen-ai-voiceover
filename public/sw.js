@@ -21,7 +21,13 @@ const APP_FILES = [
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_FILES.map((file) => new URL(file, self.registration.scope).href));
+    const manifestUrl = new URL("./precache-manifest.json", self.registration.scope).href;
+    const manifestResponse = await fetch(manifestUrl);
+    if (!manifestResponse.ok) throw new Error("Could not load the local runtime precache manifest.");
+    const manifest = await manifestResponse.json();
+    const appUrls = APP_FILES.map((file) => new URL(file, self.registration.scope).href);
+    const runtimeUrls = (manifest.assets || []).map((file) => new URL(file, self.registration.scope).href);
+    await cache.addAll([...appUrls, manifestUrl, ...runtimeUrls]);
     await self.skipWaiting();
   })());
 });
