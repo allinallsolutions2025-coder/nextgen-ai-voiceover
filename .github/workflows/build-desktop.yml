@@ -1,0 +1,66 @@
+name: Build desktop installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Download English Kokoro model and build app
+        run: npm run build:offline
+
+      - name: Build Windows installer
+        if: matrix.platform == 'windows'
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Build macOS disk images
+        if: matrix.platform == 'macos'
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish never
+
+      - name: Build Linux packages
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux AppImage deb --x64 --publish never
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-ai-voiceover-${{ matrix.platform }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 30
