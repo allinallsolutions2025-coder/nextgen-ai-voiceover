@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = resolve(root, "dist");
 const modelId = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const modelRevision = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
