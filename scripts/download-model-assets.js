@@ -1,6 +1,6 @@
 import { createWriteStream } from "node:fs";
 import { mkdir, rename, rm, stat } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
@@ -37,7 +37,8 @@ async function existsAndComplete(path, file) {
 
 async function download(file) {
   const destination = resolve(OUTPUT, file);
-  if (!destination.startsWith(OUTPUT + "/")) throw new Error("Invalid model asset path: " + file);
+  const relativePath = relative(OUTPUT, destination);
+  if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) throw new Error("Invalid model asset path: " + file);
   if (await existsAndComplete(destination, file)) {
     process.stdout.write(`Cached ${file}\n`);
     return;
