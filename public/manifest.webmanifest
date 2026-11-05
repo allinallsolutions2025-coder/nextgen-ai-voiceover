@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "NextGen AI Voiceover",
+  "short_name": "NextGen Voiceover",
+  "description": "An English-first, on-device voiceover studio powered by Kokoro.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7fb",
+  "theme_color": "#f4f7fb",
+  "categories": ["productivity", "utilities", "music"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
