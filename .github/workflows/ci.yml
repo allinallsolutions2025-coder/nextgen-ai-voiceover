@@ -54,12 +54,14 @@ jobs:
       - name: Verify deployment output
         run: |
           test -s dist/index.html
-          test -s dist/src/main.js
-          test -s dist/src/lib/voice-catalog.js
-          test -s dist/src/styles.css
+          test -d dist/assets
+          test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+          test -n "$(find dist/assets -type f -name '*.css' -print -quit)"
           test -s dist/manifest.webmanifest
           test -s dist/sw.js
           test -s dist/icon.svg
+          test -s dist/icon-192.png
+          test -s dist/icon-512.png
           test -d dist/ort
           test -f dist/.nojekyll
           test ! -e dist/backend
