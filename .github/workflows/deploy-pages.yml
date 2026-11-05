@@ -6,10 +6,12 @@ on:
     paths:
       - "index.html"
       - "src/**"
+      - "public/**"
       - "package.json"
       - "package-lock.json"
       - "scripts/build-site.js"
       - "scripts/check-build.js"
+      - "scripts/check-platform-build.js"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -39,7 +41,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Check JavaScript syntax
         run: npm run check
