@@ -74,7 +74,13 @@
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "maintainer": "NextGen AI Voiceover",
+      "synopsis": "Local English voiceover studio powered by Kokoro",
+      "description": "Generate American and British English voiceovers locally with the bundled Kokoro model.",
+      "desktopName": "nextgen-ai-voiceover",
+      "syncDesktopName": true,
+      "icon": "public/icon-512.png"
     },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   }
