@@ -13,6 +13,7 @@ on:
       - "src/**"
       - "scripts/download-model.js"
       - "scripts/copy-ort-assets.js"
+      - "scripts/validate-offline-bundle.js"
       - "scripts/generate-pwa-icons.js"
       - "electron/**"
 
