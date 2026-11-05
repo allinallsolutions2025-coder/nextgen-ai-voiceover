@@ -121,26 +121,16 @@
 
           <details class="benchmark-tools" id="voiceBenchmark">
             <summary>
-              <span><strong>Compare English voices</strong><small>Generate and audition the same sample with all 28 voices</small></span>
+              <span><strong>All 28 English voice previews</strong><small>Prepared automatically and saved in this browser for instant playback on future visits</small></span>
               <span class="details-chevron" aria-hidden="true">⌄</span>
             </summary>
             <div class="benchmark-content">
-              <div class="field">
-                <label for="benchmarkPreset">Sample type</label>
-                <select id="benchmarkPreset">
-                  <option value="balanced">Balanced narration</option>
-                  <option value="creator">Creator / energetic</option>
-                  <option value="technical">Technical explanation</option>
-                </select>
-              </div>
-              <label class="sr-only" for="benchmarkScript">Voice comparison text</label>
-              <textarea id="benchmarkScript" class="benchmark-script-input" rows="4" maxlength="1200">Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.</textarea>
-              <p class="benchmark-hint">Creates 28 local WAV previews and may take several minutes.</p>
+              <p class="benchmark-hint">Every voice uses the same short sample so you can compare American and British accents consistently. The first preparation runs in the background and pauses while you generate your own voiceover.</p>
               <div class="benchmark-actions">
-                <button id="runBenchmarkButton" class="button button-secondary" type="button" disabled>Compare all 28 voices</button>
-                <button id="stopBenchmarkButton" class="button button-secondary" type="button" hidden disabled>Stop comparison</button>
+                <button id="runBenchmarkButton" class="button button-secondary" type="button" disabled>Prepare missing previews</button>
+                <button id="stopBenchmarkButton" class="button button-secondary" type="button" hidden disabled>Pause preparation</button>
               </div>
-              <p id="benchmarkStatus" class="benchmark-status" role="status">Load the model to compare voices.</p>
+              <p id="benchmarkStatus" class="benchmark-status" role="status">Voice previews will prepare automatically after the model loads.</p>
               <div id="benchmarkResults" class="benchmark-results" aria-live="polite"></div>
             </div>
           </details>
