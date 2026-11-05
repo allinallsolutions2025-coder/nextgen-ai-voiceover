@@ -59,9 +59,9 @@ const requiredHtmlMarkers = [
   'id="voicePreviewAudio"',
   'id="cancelButton"',
   'id="enhanceSpokenText"',
-  'id="benchmarkPreset"',
-  'id="benchmarkScript"',
   'id="runBenchmarkButton"',
+  'id="stopBenchmarkButton"',
+  'id="benchmarkStatus"',
   'id="benchmarkResults"',
   'src="./src/main.js"',
   'href="./src/styles.css"'
@@ -142,9 +142,10 @@ if (!main.includes("tts.stream(") || !main.includes("createWavBlobFromSamples"))
 if (!main.includes("rate * 0.38") || !main.includes("rate * 0.12")) {
   throw new Error("Distinct paragraph and stream-chunk pauses are required.");
 }
-if (!main.includes("runVoiceBenchmark") || !main.includes("addBenchmarkResult") ||
-    !main.includes("addBenchmarkError") || !html.includes('id="voiceBenchmark"')) {
-  throw new Error("The cancelable 28-voice English audition benchmark is required.");
+if (!main.includes("runVoiceBenchmark") || !main.includes("renderVoicePreviewCards") ||
+    !main.includes("setPreviewReady") || !main.includes("getVoicePreviewDatabase") ||
+    !main.includes("saveVoicePreviewCache") || !html.includes('id="voiceBenchmark"')) {
+  throw new Error("The automatically prepared and locally cached 28-voice English preview library is required.");
 }
 
 if (!main.includes("processAudioSamples") || !main.includes("getAudioDurationSeconds") ||

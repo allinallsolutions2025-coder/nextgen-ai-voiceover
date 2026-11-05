@@ -6,7 +6,7 @@ An English-first, browser-based text-to-speech studio powered by Kokoro. It focu
 
 **Kokoro.js 1.2.1** runs the Kokoro-82M q8 ONNX model locally in the browser through WebAssembly. The product exposes 28 English voices: American English and British English, with female and male voices in both accent groups. Non-English Kokoro IDs are excluded from the public voice selector.
 
-The app restores the model automatically and enables browser caching. The first visit downloads the voice model and runtime assets; later visits can reuse the browser cache. No speech API key or remote speech server is needed for generation.
+The app restores the model automatically and enables browser caching. The first visit downloads the voice model and runtime assets, then prepares the 28 short voice previews in the background; later visits can reuse both the model cache and saved preview audio. No speech API key or remote speech server is needed for generation.
 
 ## Studio interface
 
@@ -20,7 +20,7 @@ The interface uses a light slate-and-blue professional theme with larger, readab
 - **Pronunciation guide:** add one replacement per line, such as `OpenAI = Open A I` or `SQL = sequel`. Matching is case-insensitive and respects word/phrase boundaries. Replacements apply to the audio input only; the original script is preserved. Rules are saved locally in the current browser.
 - **Speaking pace:** use Relaxed (0.90×), Natural (1.00×), Brisk (1.15×), or set a custom speed from 0.50× to 2.00×.
 - **Smart spoken-text cleanup:** optionally read common dates, years, numbers, numeric ranges, percentages, currencies, measurements, times and common initialisms aloud. Review the prepared spoken text before generating; this changes only the speech input, while the original draft remains intact. Custom pronunciation rules are applied first.
-- **Voice comparison bench:** generate the same short script as a WAV with each of the 28 American and British voices, audition the results, and download individual samples. Includes balanced, creator-style and technical benchmark scripts.
+- **Always-ready voice previews:** after the model loads, the app prepares one short WAV sample for every English voice. Each preview appears as a playable card and is saved in IndexedDB, so later visits can restore the full 28-voice preview library without synthesizing those samples again. Preparation pauses while you generate or preview your own script and resumes afterwards.
 - **Narration pacing:** speech is streamed paragraph by paragraph, with a longer pause between paragraphs and a shorter pause between streamed chunks.
 - **Paragraph editor:** edit each section independently, reorder sections, split at the text cursor, merge with the next section, and set an optional English voice and speaking pace override.
 - **Section regeneration:** regenerate one paragraph without rerendering the other section files. Its audio file and ZIP bundle are refreshed. Per-paragraph overrides apply to section files; the continuous full-script file uses the studio-wide voice and pace.

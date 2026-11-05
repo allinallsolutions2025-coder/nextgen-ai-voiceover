@@ -185,9 +185,9 @@ try {
   assert.equal(report.checks.smartSpokenTextControlPresent, true, "Smart spoken-text control is missing.");
   report.checks.smartSpokenTextEnabledByDefault = await page.locator("#enhanceSpokenText").isChecked();
   assert.equal(report.checks.smartSpokenTextEnabledByDefault, true, "Smart spoken-text cleanup should be enabled by default.");
-  report.checks.voiceBenchmarkControlsPresent =
-    await page.locator("#benchmarkPreset, #benchmarkScript, #runBenchmarkButton, #benchmarkResults").count() === 4;
-  assert.equal(report.checks.voiceBenchmarkControlsPresent, true, "The 28-voice benchmark controls are missing.");
+  report.checks.voicePreviewLibraryPresent =
+    await page.locator("#runBenchmarkButton, #stopBenchmarkButton, #benchmarkStatus, #benchmarkResults").count() === 4;
+  assert.equal(report.checks.voicePreviewLibraryPresent, true, "The automatic 28-voice preview library is missing.");
   report.checks.favoriteVoiceControlPresent = await page.locator("#favoriteVoiceButton").count() === 1;
   assert.equal(report.checks.favoriteVoiceControlPresent, true, "Voice favourite control is missing.");
   report.checks.spokenTextPreviewPresent = await page.locator("#spokenPreviewText").count() === 1;
@@ -553,6 +553,51 @@ try {
     "English synthesis with pronunciation rules did not produce a valid WAV.");
   report.pronunciationWav = pronunciationWav;
   report.checks.pronunciationRuleSynthesis = true;
+
+  // All 28 matching preview WAVs should be prepared automatically and saved locally.
+  await page.locator("#voiceBenchmark summary").click();
+  await page.waitForFunction(() =>
+    document.querySelectorAll("#benchmarkResults .benchmark-card-ready").length === 28,
+  null, { timeout: 8 * 60 * 1000 });
+  const previewCache = await page.evaluate(() => new Promise(resolve => {
+    const request = indexedDB.open("nextgen-voiceover-voice-previews-v1", 1);
+    request.onerror = () => resolve({ count: 0, error: "IndexedDB unavailable" });
+    request.onsuccess = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains("voice-previews")) {
+        database.close();
+        resolve({ count: 0, error: "Preview store missing" });
+        return;
+      }
+      const read = database.transaction("voice-previews", "readonly")
+        .objectStore("voice-previews").getAll();
+      read.onsuccess = () => {
+        const records = read.result || [];
+        database.close();
+        resolve({ count: records.filter(record =>
+          record.sampleVersion === 1 && record.blob instanceof Blob
+        ).length });
+      };
+      read.onerror = () => {
+        database.close();
+        resolve({ count: 0, error: "Could not read the preview cache" });
+      };
+    };
+  }));
+  assert.equal(previewCache.count, 28, "All 28 voice previews were not saved to IndexedDB.");
+  report.voicePreviewCache = previewCache;
+  report.checks.all28VoicePreviewsReady = true;
+  report.checks.voicePreviewCachePersisted = true;
+
+  // Reload and confirm the saved samples are restored as playable cards.
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
+  await page.waitForFunction(() =>
+    (document.querySelector("#modelBadge")?.textContent || "").includes("Model ready"),
+  null, { timeout: 8 * 60 * 1000 });
+  await page.waitForFunction(() =>
+    document.querySelectorAll("#benchmarkResults .benchmark-card-ready").length === 28,
+  null, { timeout: 120000 });
+  report.checks.voicePreviewsRestoreFromIndexedDb = true;
 
   report.checks.passed = true;
   console.log("PAGES_FULL_SCRIPT_PARAGRAPH_WAV_SMOKE_TEST_PASSED");

@@ -23,6 +23,9 @@ const RECENT_VOICES_STORAGE_KEY = "nextgen-voiceover-recent-voices-v1";
 const PARAGRAPH_SETTINGS_STORAGE_KEY = "nextgen-voiceover-paragraph-settings-v1";
 const CREATOR_EXPORT_SETTINGS_KEY = "nextgen-voiceover-creator-export-v1";
 const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
+const VOICE_PREVIEW_CACHE_VERSION = 1;
+const VOICE_PREVIEW_DB_NAME = "nextgen-voiceover-voice-previews-v1";
+const VOICE_PREVIEW_STORE_NAME = "voice-previews";
 
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
@@ -38,8 +41,6 @@ const elements = {
   pronunciationRules: document.querySelector("#pronunciationRules"),
   pronunciationStatus: document.querySelector("#pronunciationStatus"),
   enhanceSpokenText: document.querySelector("#enhanceSpokenText"),
-  benchmarkPreset: document.querySelector("#benchmarkPreset"),
-  benchmarkScript: document.querySelector("#benchmarkScript"),
   runBenchmarkButton: document.querySelector("#runBenchmarkButton"),
   stopBenchmarkButton: document.querySelector("#stopBenchmarkButton"),
   benchmarkStatus: document.querySelector("#benchmarkStatus"),
@@ -82,14 +83,20 @@ const state = {
   supportedVoiceIds: new Set(),
   voiceCatalog: [],
   objectUrls: [],
-  benchmarkObjectUrls: [],
-  benchmarkAbortController: null,
+  voicePreviewDbPromise: null,
+  voicePreviewBlobs: new Map(),
+  voicePreviewObjectUrls: new Map(),
+  voicePreviewPersistedIds: new Set(),
+  voicePreviewFailedIds: new Set(),
+  voicePreviewPrepareController: null,
+  voicePreviewPreparePromise: null,
+  isPreparingVoicePreviews: false,
+  voicePreviewUserPaused: false,
   previewObjectUrl: null,
   previewController: null,
   activeAbortController: null,
   isGenerating: false,
   isPreviewing: false,
-  isBenchmarking: false,
   favoriteVoiceIds: new Set(),
   recentVoiceIds: [],
   paragraphs: [],
@@ -156,8 +163,16 @@ function restoreDraftLocally() {
 
 function updateBenchmarkButtonState() {
   if (!elements.runBenchmarkButton) return;
-  elements.runBenchmarkButton.disabled = !state.tts || state.voiceCatalog.length !== 28 ||
-    state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  const failed = state.voicePreviewFailedIds.size;
+  const missing = state.voiceCatalog.length - state.voicePreviewBlobs.size;
+  elements.runBenchmarkButton.disabled = !state.tts || !state.voiceCatalog.length ||
+    state.isPreparingVoicePreviews || state.isGenerating || state.isPreviewing ||
+    (missing <= 0 && failed === 0);
+  elements.runBenchmarkButton.textContent = failed ? "Retry failed previews" :
+    state.voicePreviewUserPaused ? "Resume preparation" :
+    missing > 0 ? "Prepare missing previews" : "All " + state.voiceCatalog.length + " previews ready";
+  elements.stopBenchmarkButton.hidden = !state.isPreparingVoicePreviews;
+  elements.stopBenchmarkButton.disabled = !state.isPreparingVoicePreviews;
 }
 
 function persistParagraphSettings() {
@@ -223,7 +238,7 @@ function updateParagraphEditorStatus(message, kind = "normal") {
 }
 
 function updateParagraphEditorControls() {
-  const busy = state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  const busy = state.isGenerating || state.isPreviewing;
   for (const button of elements.paragraphEditorList.querySelectorAll(".paragraph-action-regenerate")) {
     const index = Number(button.dataset.paragraphIndex);
     const hasAudio = Boolean(state.generatedParagraphBlobs[index] && state.fullScriptBlob);
@@ -502,7 +517,7 @@ function toggleFavoriteVoice() {
 function updatePreviewButtonState() {
   const voice = elements.voiceSelect.value;
   const voiceAvailable = Boolean(state.tts && voice && state.supportedVoiceIds.has(voice));
-  const busy = state.isGenerating || state.isPreviewing || state.isBenchmarking;
+  const busy = state.isGenerating || state.isPreviewing;
   elements.previewVoiceButton.disabled = !voiceAvailable || busy;
   elements.favoriteVoiceButton.disabled = !voiceAvailable || busy;
   const favorite = state.favoriteVoiceIds.has(voice);
@@ -663,6 +678,7 @@ function populateVoiceSelector(tts = null) {
   persistParagraphSettings();
   renderVoiceSelector();
   renderParagraphEditor();
+  renderVoicePreviewCards();
 }
 
 function updatePronunciationStatus() {
@@ -717,7 +733,6 @@ function saveSpokenTextPreference() {
     // Preference still applies for the current tab.
   }
   clearResults();
-  clearBenchmarkResults();
 }
 
 function savePronunciationRules() {
@@ -748,16 +763,17 @@ function setSpeed(value) {
     button.setAttribute("aria-pressed", String(Number(button.dataset.speedPreset) === speed));
   }
   clearResults();
-  clearBenchmarkResults();
   renderParagraphEditor();
 }
 
 async function loadModel() {
   if (state.tts) {
+    if (!state.voiceCatalog.length) populateVoiceSelector(state.tts);
     setBadge("Model ready", "ready");
     elements.loadButton.textContent = "Model ready";
     elements.loadButton.disabled = true;
     setStatus("Voice model is ready. Choose a voice and generate your script.", "good");
+    void runVoiceBenchmark();
     return;
   }
 
@@ -767,11 +783,11 @@ async function loadModel() {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus("Your 28 English voices are ready. Choose an American or British voice and preview it before generating.", "good");
+    setStatus("Your 28 English voices are ready. Their short previews are preparing in the background.", "good");
     elements.generateButton.disabled = !state.voiceCatalog.length;
     updateBenchmarkButtonState();
     setProgress(100);
-    updateBenchmarkButtonState();
+    void runVoiceBenchmark();
   } catch (error) {
     console.error(error);
     setBadge("Model load failed", "error");
@@ -888,47 +904,41 @@ async function generateSelectedSpeechBlob(tts, text, voice, speed, outputFormat,
 }
 
 async function previewSelectedVoice() {
-  if (state.isGenerating || state.isPreviewing) return;
-  const selectedVoice = elements.voiceSelect.value;
-  rememberRecentVoice(selectedVoice);
-  if (!selectedVoice || !state.supportedVoiceIds.has(selectedVoice)) return;
-  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
-  if (pronunciation.errors.length) {
-    setStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before previewing.", "error");
-    return;
+  if(state.isGenerating||state.isPreviewing)return;
+  const selectedVoice=elements.voiceSelect.value; rememberRecentVoice(selectedVoice);
+  if(!selectedVoice||!state.supportedVoiceIds.has(selectedVoice))return;
+  const scriptSample=elements.scriptInput.value.trim().slice(0,160);
+  const cached=!scriptSample?state.voicePreviewBlobs.get(selectedVoice):null;
+  if(cached){
+    if(state.previewObjectUrl)URL.revokeObjectURL(state.previewObjectUrl);
+    state.previewObjectUrl=URL.createObjectURL(cached); elements.voicePreviewAudio.src=state.previewObjectUrl;
+    elements.voicePreviewAudio.hidden=false; try{await elements.voicePreviewAudio.play();}catch{}
+    setStatus("Ready-to-play English preview: "+selectedVoice+".","good"); return;
   }
-  const scriptSample = elements.scriptInput.value.trim().slice(0, 160) || PREVIEW_TEXT;
-  const sample = transformTextForSpeech(scriptSample, pronunciation.rules);
-  const controller = new AbortController();
-  state.previewController = controller;
-  state.isPreviewing = true;
-  updateParagraphEditorControls();
-  elements.previewVoiceButton.disabled = true;
-  elements.previewVoiceButton.textContent = "Generating preview…";
-  try {
-    const tts = state.tts || await getTTS();
-    const blob = await generateSelectedSpeechBlob(
-      tts, sample, selectedVoice, Number(elements.speedInput.value), "wav", controller.signal
-    );
+  const pronunciation=parsePronunciationRules(elements.pronunciationRules.value);
+  if(pronunciation.errors.length){setStatus("Fix pronunciation rules on line(s) "+pronunciation.errors.join(", ")+" before previewing.","error");return;}
+  await pauseBackgroundVoicePreviews();
+  const sample=transformTextForSpeech(scriptSample||PREVIEW_TEXT,pronunciation.rules);
+  const controller=new AbortController(); state.previewController=controller; state.isPreviewing=true;
+  updateParagraphEditorControls(); updateBenchmarkButtonState(); elements.previewVoiceButton.disabled=true; elements.previewVoiceButton.textContent="Generating preview…";
+  try{
+    const tts=state.tts||await getTTS();
+    const blob=await generateSelectedSpeechBlob(tts,sample,selectedVoice,Number(elements.speedInput.value),"wav",controller.signal);
     throwIfAborted(controller.signal);
-    if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
-    state.previewObjectUrl = URL.createObjectURL(blob);
-    elements.voicePreviewAudio.src = state.previewObjectUrl;
-    elements.voicePreviewAudio.hidden = false;
-    try { await elements.voicePreviewAudio.play(); } catch {}
-    setStatus("English voice preview ready: " + selectedVoice + ". Try another accent or voice to compare.", "good");
-  } catch (error) {
-    if (error?.name === "AbortError") setStatus("Voice preview stopped.", "normal");
-    else {
-      console.error(error);
-      setStatus("Could not preview this voice: " + (error?.message || String(error)), "error");
+    if(!scriptSample){
+      const saved=await saveVoicePreviewCache(selectedVoice,blob,await getVoicePreviewDatabase());
+      const voice=state.voiceCatalog.find(item=>item.id===selectedVoice); if(voice)setPreviewReady(voice,blob,saved);
     }
-  } finally {
-    state.isPreviewing = false;
-    state.previewController = null;
-    updateParagraphEditorControls();
-    elements.previewVoiceButton.textContent = "Preview voice";
-    updatePreviewButtonState();
+    if(state.previewObjectUrl)URL.revokeObjectURL(state.previewObjectUrl);
+    state.previewObjectUrl=URL.createObjectURL(blob); elements.voicePreviewAudio.src=state.previewObjectUrl;
+    elements.voicePreviewAudio.hidden=false; try{await elements.voicePreviewAudio.play();}catch{}
+    setStatus("English voice preview ready: "+selectedVoice+".","good");
+  }catch(error){
+    if(error?.name==="AbortError")setStatus("Voice preview stopped.","normal");
+    else{console.error(error);setStatus("Could not preview this voice: "+(error?.message||String(error)),"error");}
+  }finally{
+    state.isPreviewing=false; state.previewController=null; updateParagraphEditorControls();
+    elements.previewVoiceButton.textContent="Preview voice"; updatePreviewButtonState(); resumeVoicePreviewPreparation();
   }
 }
 
@@ -1113,7 +1123,7 @@ async function refreshZipDownload() {
 }
 
 async function regenerateParagraph(index) {
-  if (state.isGenerating || state.isPreviewing || state.isBenchmarking) return;
+  if (state.isGenerating || state.isPreviewing) return;
   const paragraph = state.paragraphs[index];
   if (!paragraph || !state.generatedParagraphBlobs[index] || !state.fullScriptBlob) return;
 
@@ -1131,9 +1141,11 @@ async function regenerateParagraph(index) {
     return;
   }
 
+  await pauseBackgroundVoicePreviews();
   const controller = new AbortController();
   state.activeAbortController = controller;
   state.isGenerating = true;
+  updateBenchmarkButtonState();
   elements.cancelButton.hidden = false;
   elements.cancelButton.disabled = false;
   elements.generateButton.disabled = true;
@@ -1191,160 +1203,138 @@ async function regenerateParagraph(index) {
     setParagraphEditorBusy(false);
     updatePreviewButtonState();
     updateBenchmarkButtonState();
+    resumeVoicePreviewPreparation();
   }
 }
-
-const BENCHMARK_SCRIPTS = {
-  balanced: "Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.",
-  creator: "Wait, this is actually impressive! You can turn a rough idea into a finished video in minutes. The best part? You stay in control from the first line to the final export. Let's make something great.",
-  technical: "The API processes 1,250 requests per second, uses 2.5 gigabytes of memory, and keeps average latency below 120 milliseconds. Visit example.com for the documentation, or send your questions to support@example.com."
-};
 
 function setBenchmarkStatus(message, kind = "normal") {
   elements.benchmarkStatus.textContent = message;
   elements.benchmarkStatus.className = "benchmark-status" + (kind === "error" ? " status-error" : kind === "good" ? " status-good" : "");
 }
-
-function clearBenchmarkResults() {
-  for (const url of state.benchmarkObjectUrls) URL.revokeObjectURL(url);
-  state.benchmarkObjectUrls = [];
+function previewCard(id) { return [...elements.benchmarkResults.children].find(card => card.dataset.voiceId === id) || null; }
+function setPreviewReady(voice, blob, persisted = false) {
+  state.voicePreviewBlobs.set(voice.id, blob);
+  state.voicePreviewFailedIds.delete(voice.id);
+  if (persisted) state.voicePreviewPersistedIds.add(voice.id);
+  const card = previewCard(voice.id);
+  if (!card) return;
+  let url = state.voicePreviewObjectUrls.get(voice.id);
+  if (!url) { url = URL.createObjectURL(blob); state.voicePreviewObjectUrls.set(voice.id,url); }
+  card.classList.remove("benchmark-card-error"); card.classList.add("benchmark-card-ready");
+  card.querySelector(".benchmark-card-state").textContent = persisted ? "Ready · saved on this device" : "Ready · this session";
+  const audio = card.querySelector("audio"); audio.src = url; audio.hidden = false;
+  const link = card.querySelector("a"); link.href = url; link.hidden = false;
+}
+function setPreviewError(voice,error) {
+  state.voicePreviewFailedIds.add(voice.id);
+  const card=previewCard(voice.id); if(!card)return;
+  card.classList.add("benchmark-card-error");
+  card.querySelector(".benchmark-card-state").textContent="Could not prepare: "+(error?.message||"generation failed");
+}
+function renderVoicePreviewCards() {
   elements.benchmarkResults.replaceChildren();
-}
-
-function addBenchmarkResult(voice, blob) {
-  const url = URL.createObjectURL(blob);
-  state.benchmarkObjectUrls.push(url);
-  const card = document.createElement("article");
-  card.className = "benchmark-card";
-  card.dataset.voiceId = voice.id;
-
-  const title = document.createElement("strong");
-  title.textContent = voice.name + " · " + voice.id;
-  const description = document.createElement("small");
-  description.textContent = voice.languageLabel + " · " + voice.gender;
-  const player = document.createElement("audio");
-  player.controls = true;
-  player.preload = "none";
-  player.src = url;
-  player.setAttribute("aria-label", "Benchmark preview for " + voice.name);
-  const download = document.createElement("a");
-  download.href = url;
-  download.download = "voice-benchmark-" + voice.id + ".wav";
-  download.textContent = "Download WAV";
-  card.append(title, description, player, download);
-  elements.benchmarkResults.append(card);
-}
-
-function addBenchmarkError(voice, error) {
-  const card = document.createElement("article");
-  card.className = "benchmark-card benchmark-card-error";
-  card.dataset.voiceId = voice.id;
-  const title = document.createElement("strong");
-  title.textContent = voice.name + " · " + voice.id;
-  const description = document.createElement("small");
-  description.textContent = voice.languageLabel + " · " + voice.gender + " · generation failed";
-  const detail = document.createElement("small");
-  detail.textContent = error?.message || "This voice could not be generated.";
-  card.append(title, description, detail);
-  elements.benchmarkResults.append(card);
-}
-
-async function runVoiceBenchmark() {
-  if (state.isGenerating || state.isPreviewing || state.isBenchmarking) return;
-  const rawText = elements.benchmarkScript.value.trim();
-  if (!rawText || rawText.length > 1200) {
-    setBenchmarkStatus("Enter a benchmark script between 1 and 1,200 characters.", "error");
-    return;
+  for (const voice of state.voiceCatalog) {
+    const card=document.createElement("article"); card.className="benchmark-card"; card.dataset.voiceId=voice.id;
+    const title=document.createElement("strong"); title.textContent=voice.name+" · "+voice.id;
+    const meta=document.createElement("small"); meta.textContent=voice.languageLabel+" · "+voice.gender;
+    const status=document.createElement("small"); status.className="benchmark-card-state"; status.textContent="Waiting to prepare";
+    const audio=document.createElement("audio"); audio.controls=true; audio.preload="none"; audio.hidden=true;
+    audio.setAttribute("aria-label","Ready-to-play English preview for "+voice.name);
+    const download=document.createElement("a"); download.hidden=true; download.download="voice-preview-"+voice.id+".wav"; download.textContent="Download WAV";
+    card.append(title,meta,status,audio,download); elements.benchmarkResults.append(card);
+    if(state.voicePreviewBlobs.has(voice.id))setPreviewReady(voice,state.voicePreviewBlobs.get(voice.id),state.voicePreviewPersistedIds.has(voice.id));
   }
-  const pronunciation = parsePronunciationRules(elements.pronunciationRules.value);
-  if (pronunciation.errors.length) {
-    setBenchmarkStatus("Fix pronunciation rules on line(s) " + pronunciation.errors.join(", ") + " before benchmarking.", "error");
-    return;
-  }
-
-  clearBenchmarkResults();
-  const controller = new AbortController();
-  state.benchmarkAbortController = controller;
-  state.isBenchmarking = true;
-  setParagraphEditorBusy(true);
-  elements.runBenchmarkButton.disabled = true;
-  elements.stopBenchmarkButton.hidden = false;
-  elements.stopBenchmarkButton.disabled = false;
-  elements.benchmarkPreset.disabled = true;
-  elements.benchmarkScript.disabled = true;
-  elements.previewVoiceButton.disabled = true;
-  elements.generateButton.disabled = true;
-  elements.voiceSelect.disabled = true;
-  elements.voiceFilterSelect.disabled = true;
-  elements.speedInput.disabled = true;
-  elements.pronunciationRules.disabled = true;
-  elements.enhanceSpokenText.disabled = true;
-  for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = true;
-
-  try {
-    const tts = state.tts || await getTTS();
-    if (!state.voiceCatalog.length) populateVoiceSelector(tts);
-    const script = transformTextForSpeech(rawText, pronunciation.rules);
-    const speed = Number(elements.speedInput.value);
-    const total = state.voiceCatalog.length;
-    const failedVoices = [];
-
-    for (let index = 0; index < total; index += 1) {
+  updateBenchmarkButtonState();
+}
+function getVoicePreviewDatabase() {
+  if(!("indexedDB" in window))return Promise.resolve(null);
+  if(!state.voicePreviewDbPromise)state.voicePreviewDbPromise=new Promise((resolve,reject)=>{
+    const request=indexedDB.open(VOICE_PREVIEW_DB_NAME,VOICE_PREVIEW_CACHE_VERSION);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains("voice-previews"))request.result.createObjectStore("voice-previews",{keyPath:"voiceId"});};
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error||new Error("Unable to open local voice preview storage."));
+  }).catch(error=>{console.warn(error);state.voicePreviewDbPromise=null;return null;});
+  return state.voicePreviewDbPromise;
+}
+async function readVoicePreviewCache(db) {
+  if(!db)return [];
+  return new Promise(resolve=>{try{
+    const request=db.transaction("voice-previews","readonly").objectStore("voice-previews").getAll();
+    request.onsuccess=()=>resolve(request.result||[]); request.onerror=()=>resolve([]);
+  }catch{resolve([]);}});
+}
+async function saveVoicePreviewCache(id,blob,db) {
+  if(!db)return false;
+  return new Promise(resolve=>{try{
+    const tx=db.transaction("voice-previews","readwrite");
+    tx.objectStore("voice-previews").put({voiceId:id,sampleVersion:VOICE_PREVIEW_CACHE_VERSION,blob,createdAt:new Date().toISOString()});
+    tx.oncomplete=()=>resolve(true); tx.onerror=()=>resolve(false); tx.onabort=()=>resolve(false);
+  }catch{resolve(false);}});
+}
+async function pauseBackgroundVoicePreviews() {
+  const pending=state.voicePreviewPreparePromise;
+  if(!pending)return;
+  state.voicePreviewPrepareController?.abort();
+  await pending.catch(()=>{});
+}
+function resumeVoicePreviewPreparation() {
+  if(state.voicePreviewUserPaused||!state.tts||state.voicePreviewBlobs.size>=state.voiceCatalog.length||state.voicePreviewPreparePromise)return;
+  void runVoiceBenchmark();
+}
+async function runVoiceBenchmark({retryFailures=false}={}) {
+  if(!state.tts||!state.voiceCatalog.length||state.isGenerating||state.isPreviewing)return;
+  if(state.voicePreviewPreparePromise)return state.voicePreviewPreparePromise;
+  if(retryFailures)state.voicePreviewFailedIds.clear();
+  state.voicePreviewUserPaused=false;
+  const controller=new AbortController(); state.voicePreviewPrepareController=controller;
+  state.isPreparingVoicePreviews=true; elements.runBenchmarkButton.disabled=true;
+  elements.stopBenchmarkButton.hidden=false; elements.stopBenchmarkButton.disabled=false;
+  setBenchmarkStatus("Checking this browser for saved voice previews…");
+  const task=(async()=>{
+    try{
+      const db=await getVoicePreviewDatabase(), cached=await readVoicePreviewCache(db);
       throwIfAborted(controller.signal);
-      const voice = state.voiceCatalog[index];
-      setBenchmarkStatus("Generating voice " + (index + 1) + " of " + total + ": " + voice.name + " (" + voice.languageLabel + ")…");
-      try {
-        const blob = await generateSelectedSpeechBlob(tts, script, voice.id, speed, "wav", controller.signal);
-        throwIfAborted(controller.signal);
-        addBenchmarkResult(voice, blob);
-      } catch (error) {
-        if (controller.signal.aborted || error?.name === "AbortError") throw error;
-        failedVoices.push(voice.id);
-        addBenchmarkError(voice, error);
+      for(const entry of cached){
+        if(entry?.sampleVersion!==VOICE_PREVIEW_CACHE_VERSION||!(entry.blob instanceof Blob)||!state.supportedVoiceIds.has(entry.voiceId))continue;
+        const voice=state.voiceCatalog.find(item=>item.id===entry.voiceId);
+        state.voicePreviewBlobs.set(voice.id,entry.blob); state.voicePreviewPersistedIds.add(voice.id); setPreviewReady(voice,entry.blob,true);
       }
-      setProgress(((index + 1) / total) * 100);
+      const total=state.voiceCatalog.length;
+      for(const voice of state.voiceCatalog){
+        throwIfAborted(controller.signal);
+        if(state.voicePreviewBlobs.has(voice.id)||state.voicePreviewFailedIds.has(voice.id))continue;
+        const card=previewCard(voice.id);
+        if(card){card.classList.remove("benchmark-card-ready","benchmark-card-error");card.querySelector(".benchmark-card-state").textContent="Preparing preview…";}
+        setBenchmarkStatus("Preparing "+(state.voicePreviewBlobs.size+1)+" of "+total+" · "+voice.name+" ("+voice.languageLabel+")…");
+        await new Promise(resolve=>setTimeout(resolve,0));
+        try{
+          const blob=await generateSelectedSpeechBlob(state.tts,PREVIEW_TEXT,voice.id,1,"wav",controller.signal);
+          throwIfAborted(controller.signal);
+          const persisted=await saveVoicePreviewCache(voice.id,blob,db); setPreviewReady(voice,blob,persisted);
+        }catch(error){
+          if(controller.signal.aborted||error?.name==="AbortError")throw error;
+          console.error("Voice preview failed for "+voice.id,error); setPreviewError(voice,error);
+        }
+        updateBenchmarkButtonState();
+      }
+      throwIfAborted(controller.signal);
+      if(state.voicePreviewFailedIds.size)setBenchmarkStatus(state.voicePreviewBlobs.size+" of "+total+" previews are ready. Retry the remaining voices.","error");
+      else if(state.voicePreviewPersistedIds.size===total)setBenchmarkStatus("All "+total+" English voice previews are ready and saved on this device.","good");
+      else if(state.voicePreviewBlobs.size===total)setBenchmarkStatus("All "+total+" previews are ready for this session. Browser storage is unavailable, so they cannot be saved for later.","good");
+    }catch(error){
+      if(controller.signal.aborted||error?.name==="AbortError")setBenchmarkStatus("Preparation paused. Completed previews are kept and will resume after your voiceover finishes.");
+      else{console.error(error);setBenchmarkStatus("Voice preview preparation failed: "+(error?.message||String(error)),"error");}
     }
-
-    if (controller.signal.aborted) {
-      setBenchmarkStatus("Comparison stopped. Completed voice previews remain available.", "normal");
-    } else if (failedVoices.length) {
-      setBenchmarkStatus(
-        "Comparison finished: " + (total - failedVoices.length) + " of " + total +
-        " voices generated. Failed voices: " + failedVoices.join(", ") + ". You can retry.",
-        "error"
-      );
-    } else {
-      setBenchmarkStatus("All " + total + " English voices are ready. Play the same sample in each card to compare them.", "good");
-    }
-  } catch (error) {
-    if (controller.signal.aborted || error?.name === "AbortError") {
-      setBenchmarkStatus("Comparison stopped. Completed voice previews remain available.", "normal");
-    } else {
-      console.error(error);
-      setBenchmarkStatus("Comparison failed: " + (error?.message || String(error)), "error");
-    }
-  } finally {
-    state.isBenchmarking = false;
-    state.benchmarkAbortController = null;
-    setParagraphEditorBusy(false);
-    elements.stopBenchmarkButton.hidden = true;
-    elements.stopBenchmarkButton.disabled = true;
-    elements.benchmarkPreset.disabled = false;
-    elements.benchmarkScript.disabled = false;
-    elements.voiceSelect.disabled = state.voiceCatalog.length === 0;
-    elements.voiceFilterSelect.disabled = false;
-    elements.speedInput.disabled = false;
-    elements.pronunciationRules.disabled = false;
-    elements.enhanceSpokenText.disabled = false;
-    for (const button of document.querySelectorAll("[data-speed-preset]")) button.disabled = false;
-    elements.generateButton.disabled = !state.tts || !state.voiceCatalog.length;
-    updatePreviewButtonState();
-    updateBenchmarkButtonState();
-  }
+  })();
+  state.voicePreviewPreparePromise=task.finally(()=>{
+    state.isPreparingVoicePreviews=false; state.voicePreviewPrepareController=null; state.voicePreviewPreparePromise=null;
+    elements.stopBenchmarkButton.hidden=true; elements.stopBenchmarkButton.disabled=true; updateBenchmarkButtonState();
+  });
+  return state.voicePreviewPreparePromise;
 }
 
 async function generateAudio() {
-  if (state.isGenerating || state.isBenchmarking || state.isPreviewing) return;
+  if (state.isGenerating || state.isPreviewing) return;
   const script = elements.scriptInput.value.trim();
   state.paragraphs = reconcileParagraphs(script, state.paragraphs);
   persistParagraphSettings();
@@ -1363,6 +1353,7 @@ async function generateAudio() {
   rememberRecentVoice(selectedVoice);
   const speed = Number(elements.speedInput.value);
   clearResults();
+  await pauseBackgroundVoicePreviews();
 
   const controller = new AbortController();
   state.activeAbortController = controller;
@@ -1527,6 +1518,7 @@ async function generateAudio() {
     setParagraphEditorBusy(false);
     updatePreviewButtonState();
     updateBenchmarkButtonState();
+    resumeVoicePreviewPreparation();
   }
 }
 
@@ -1556,24 +1548,19 @@ elements.pronunciationRules.addEventListener("input", () => {
   savePronunciationRules();
   updateSpokenTextPreview();
   clearResults();
-  clearBenchmarkResults();
 });
 elements.enhanceSpokenText.addEventListener("change", () => {
   saveSpokenTextPreference();
   updateSpokenTextPreview();
 });
-elements.benchmarkPreset.addEventListener("change", () => {
-  elements.benchmarkScript.value = BENCHMARK_SCRIPTS[elements.benchmarkPreset.value] || BENCHMARK_SCRIPTS.balanced;
-  clearBenchmarkResults();
-  setBenchmarkStatus("Preset loaded. Generate the comparison to audition all 28 voices.");
+elements.runBenchmarkButton.addEventListener("click", () => {
+  void runVoiceBenchmark({ retryFailures: true });
 });
-elements.benchmarkScript.addEventListener("input", clearBenchmarkResults);
-elements.runBenchmarkButton.addEventListener("click", runVoiceBenchmark);
 elements.stopBenchmarkButton.addEventListener("click", () => {
-  if (!state.benchmarkAbortController) return;
-  state.benchmarkAbortController.abort();
+  state.voicePreviewUserPaused = true;
+  state.voicePreviewPrepareController?.abort();
   elements.stopBenchmarkButton.disabled = true;
-  setBenchmarkStatus("Stopping after the current voice finishes…");
+  setBenchmarkStatus("Pausing preview preparation. Completed previews stay ready.");
 });
 elements.previewVoiceButton.addEventListener("click", previewSelectedVoice);
 elements.cancelButton.addEventListener("click", () => {
@@ -1630,7 +1617,8 @@ setSpeed(elements.speedInput.value);
 
 window.addEventListener("beforeunload", () => {
   revokeObjectUrls();
-  clearBenchmarkResults();
+  for (const url of state.voicePreviewObjectUrls.values()) URL.revokeObjectURL(url);
+  state.voicePreviewObjectUrls.clear();
   if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
 });
 
