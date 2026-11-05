@@ -6,10 +6,13 @@ on:
     paths:
       - "index.html"
       - "src/**"
+      - "public/**"
+      - "vite.config.js"
       - "package.json"
       - "package-lock.json"
       - "scripts/build-site.js"
       - "scripts/check-build.js"
+      - "scripts/copy-ort-assets.js"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -39,7 +42,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Check JavaScript syntax
         run: npm run check
