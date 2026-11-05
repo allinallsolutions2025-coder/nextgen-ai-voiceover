@@ -11,7 +11,6 @@ const modelId = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const modelRevision = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 const modelSha256 = "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478";
 const modelRoot = resolve(root, "public/models", modelId);
-const apiUrl = `https://huggingface.co/${modelId}`;
 
 const englishVoices = [
   "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica",
