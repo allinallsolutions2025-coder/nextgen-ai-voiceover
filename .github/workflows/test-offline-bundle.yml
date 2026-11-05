@@ -1,0 +1,61 @@
+name: Verify offline Kokoro voice generation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "vite.config.js"
+      - "src/**"
+      - "public/**"
+      - "scripts/download-model.js"
+      - "scripts/copy-ort-assets.js"
+      - "scripts/validate-offline-bundle.js"
+      - "scripts/offline-smoke-test.js"
+      - ".github/workflows/test-offline-bundle.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-kokoro-smoke
+  cancel-in-progress: false
+
+jobs:
+  offline-generation:
+    name: Model load and WAV generation with network blocked
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+
+      - name: Download and validate pinned offline model
+        run: npm run build:offline
+
+      - name: Run offline end-to-end synthesis test
+        run: node scripts/offline-smoke-test.js
+
+      - name: Upload offline verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-offline-generation-report
+          path: artifacts/offline-smoke-test.json
+          if-no-files-found: warn
+          retention-days: 30
