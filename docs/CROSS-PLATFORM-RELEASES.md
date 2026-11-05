@@ -50,9 +50,11 @@ GitHub Pages publishes the PWA manifest, app icon, and service worker. In a supp
 
 ## Model and first launch
 
-The current app runtime continues to fetch the pinned Kokoro.js 1.2.1 runtime and the English Kokoro-82M model from their configured distribution sources on first use. It stores model/runtime files in the browser engine's cache for reuse. Therefore, an initial internet connection is required after installing a desktop or Android wrapper, and the first model setup is not yet a fully self-contained/offline installer. After a successful download, repeat launches can use the persisted cache while it remains available to the app.
+The native release command is `npm run build:release`. It builds the shared app, copies the pinned Kokoro.js 1.2.1 browser runtime, Transformers.js ONNX Runtime WASM files, JSZip and LAMEJS into `dist/vendor/`, then downloads the q8 `model_quantized.onnx` file, tokenizer/configuration files, and all 28 American/British English voice packs into `dist/models/onnx-community/Kokoro-82M-v1.0-ONNX/`. The desktop installer and Android APK workflows use this release build, so the model and voice packs are included in those native packages rather than fetched at first launch. Local model paths are preferred by the app; remote Hugging Face loading remains enabled as a fallback.
 
-This release scaffold does not claim the roughly 92 MB quantized ONNX model and all 28 voice packs are embedded inside the desktop installers or APK. Bundling those weights offline is a separate packaging task that must also redirect Kokoro/Transformers.js model and WASM resolution to local app assets and be tested on each target.
+The regular GitHub Pages build bundles the JavaScript/WASM runtime but does not copy the roughly 92 MB model into the Pages artifact. The browser PWA downloads that model from Hugging Face on first use and uses Transformers.js browser caching for later visits. The service worker precaches the same-origin app shell and local runtime/WASM files. For completely offline PWA use, open the app once while online and let model setup finish before disconnecting.
+
+The model download script currently resolves the upstream model repository's `main` revision when a release is built. The model license is Apache-2.0; preserve the upstream model attribution/license when redistributing the weights.
 
 ## CI artifacts
 
