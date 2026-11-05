@@ -166,7 +166,8 @@ function updateBenchmarkButtonState() {
   const failed = state.voicePreviewFailedIds.size;
   const missing = state.voiceCatalog.length - state.voicePreviewBlobs.size;
   elements.runBenchmarkButton.disabled = !state.tts || !state.voiceCatalog.length ||
-    state.isPreparingVoicePreviews || (missing <= 0 && failed === 0);
+    state.isPreparingVoicePreviews || state.isGenerating || state.isPreviewing ||
+    (missing <= 0 && failed === 0);
   elements.runBenchmarkButton.textContent = failed ? "Retry failed previews" :
     state.voicePreviewUserPaused ? "Resume preparation" :
     missing > 0 ? "Prepare missing previews" : "All " + state.voiceCatalog.length + " previews ready";
@@ -919,7 +920,7 @@ async function previewSelectedVoice() {
   await pauseBackgroundVoicePreviews();
   const sample=transformTextForSpeech(scriptSample||PREVIEW_TEXT,pronunciation.rules);
   const controller=new AbortController(); state.previewController=controller; state.isPreviewing=true;
-  updateParagraphEditorControls(); elements.previewVoiceButton.disabled=true; elements.previewVoiceButton.textContent="Generating preview…";
+  updateParagraphEditorControls(); updateBenchmarkButtonState(); elements.previewVoiceButton.disabled=true; elements.previewVoiceButton.textContent="Generating preview…";
   try{
     const tts=state.tts||await getTTS();
     const blob=await generateSelectedSpeechBlob(tts,sample,selectedVoice,Number(elements.speedInput.value),"wav",controller.signal);
@@ -1144,6 +1145,7 @@ async function regenerateParagraph(index) {
   const controller = new AbortController();
   state.activeAbortController = controller;
   state.isGenerating = true;
+  updateBenchmarkButtonState();
   elements.cancelButton.hidden = false;
   elements.cancelButton.disabled = false;
   elements.generateButton.disabled = true;
@@ -1280,7 +1282,7 @@ function resumeVoicePreviewPreparation() {
   void runVoiceBenchmark();
 }
 async function runVoiceBenchmark({retryFailures=false}={}) {
-  if(!state.tts||!state.voiceCatalog.length)return;
+  if(!state.tts||!state.voiceCatalog.length||state.isGenerating||state.isPreviewing)return;
   if(state.voicePreviewPreparePromise)return state.voicePreviewPreparePromise;
   if(retryFailures)state.voicePreviewFailedIds.clear();
   state.voicePreviewUserPaused=false;
