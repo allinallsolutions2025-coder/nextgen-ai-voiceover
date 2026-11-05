@@ -1,0 +1,178 @@
+{
+  "previewVersion": 2,
+  "modelId": "onnx-community/Kokoro-82M-v1.0-ONNX",
+  "modelRevision": "1939ad2a8e416c0acfeecc08a694d14ef25f2231",
+  "previewText": "Hello! This is a short preview of the selected voice.",
+  "sampleRate": 24000,
+  "generatedAt": "2026-11-05T18:32:39.805Z",
+  "previews": [
+    {
+      "id": "af_alloy",
+      "file": "af_alloy.wav",
+      "bytes": 374444,
+      "sha256": "93b6139241447cbc40e63b1c05107ee25d6e7141b0a3f1098f9815f0c96b7072"
+    },
+    {
+      "id": "af_aoede",
+      "file": "af_aoede.wav",
+      "bytes": 338444,
+      "sha256": "139772dde40738610ad75812f6c41b356199d254104f0e3d94e9d2d8f3d27e21"
+    },
+    {
+      "id": "af_bella",
+      "file": "af_bella.wav",
+      "bytes": 384044,
+      "sha256": "178f498b68f8a7476139d641792e7d72d073709fe3af62770350f76933399e0b"
+    },
+    {
+      "id": "af_heart",
+      "file": "af_heart.wav",
+      "bytes": 333644,
+      "sha256": "210979a1caa200d89a52a8bc9b58367f8e0f9ca0a1a8803a805509b0212b7327"
+    },
+    {
+      "id": "af_jessica",
+      "file": "af_jessica.wav",
+      "bytes": 331244,
+      "sha256": "213fee0b2a3a76a4a8da917b93d48e9d37523d470aa1ddcf97ba90227000ac3e"
+    },
+    {
+      "id": "af_kore",
+      "file": "af_kore.wav",
+      "bytes": 338444,
+      "sha256": "43ec70f06c7a542999d3375d519a80ba92c2ac37c20ef6b136edc5d7373eec7c"
+    },
+    {
+      "id": "af_nicole",
+      "file": "af_nicole.wav",
+      "bytes": 470444,
+      "sha256": "f97e5f255b0cbf0a3913521764dcb21fcb7a125a977a79a920407ecfa7f73cae"
+    },
+    {
+      "id": "af_nova",
+      "file": "af_nova.wav",
+      "bytes": 360044,
+      "sha256": "af8c1e579f22275b36279e60150a399e4ab93fa66e243ff34161854dcedf2c9d"
+    },
+    {
+      "id": "af_river",
+      "file": "af_river.wav",
+      "bytes": 326444,
+      "sha256": "f9633e64b20b2e2cd515ef45952a8399c73a77732a6b9620ecbf7831dc2c3c5f"
+    },
+    {
+      "id": "af_sarah",
+      "file": "af_sarah.wav",
+      "bytes": 379244,
+      "sha256": "50fabc44f277c2c709db61d4d2f179e2ce1037befc0791eb3a470bbcad094049"
+    },
+    {
+      "id": "af_sky",
+      "file": "af_sky.wav",
+      "bytes": 352844,
+      "sha256": "4e89ead64d3ec5fc45faceaa9e84ca32338a3f995d4ec6eb70db41169b2ab543"
+    },
+    {
+      "id": "am_adam",
+      "file": "am_adam.wav",
+      "bytes": 355244,
+      "sha256": "ced00fbf2f4b9b9325da932298fcfda6c89941ba984d47e9fba188e370f15657"
+    },
+    {
+      "id": "am_echo",
+      "file": "am_echo.wav",
+      "bytes": 367244,
+      "sha256": "ece0efe1e290239a6cd46efdbc0a05eb4ef8c1f800d7d7493d4cebc327721c23"
+    },
+    {
+      "id": "am_eric",
+      "file": "am_eric.wav",
+      "bytes": 326444,
+      "sha256": "b26873c7fa96dc822684384656cfdc477d7f472aa7f0345d99eef23d52159b9b"
+    },
+    {
+      "id": "am_fenrir",
+      "file": "am_fenrir.wav",
+      "bytes": 324044,
+      "sha256": "b19e01562ce18a92d70f9fa80bbbfe759c79ee4988505782be69bd9612f5ca04"
+    },
+    {
+      "id": "am_liam",
+      "file": "am_liam.wav",
+      "bytes": 328844,
+      "sha256": "dc86d3a19c5b8d9290112c40227ec3dc13cddc6b210a2fac705226f778b3f90f"
+    },
+    {
+      "id": "am_michael",
+      "file": "am_michael.wav",
+      "bytes": 384044,
+      "sha256": "26c6a0ae67b2565f1cceafea67651092437872dad605b9dd6f0a0c1502170dd5"
+    },
+    {
+      "id": "am_onyx",
+      "file": "am_onyx.wav",
+      "bytes": 369644,
+      "sha256": "448e7e006b41da734c6bae6e7599472e61bece8ce4fa94adcb8231ec7af13be2"
+    },
+    {
+      "id": "am_puck",
+      "file": "am_puck.wav",
+      "bytes": 336044,
+      "sha256": "588c0e060489148b4ddf4b407c3a580c4bbe64e0a2e4db23dbad6818c9119bba"
+    },
+    {
+      "id": "am_santa",
+      "file": "am_santa.wav",
+      "bytes": 360044,
+      "sha256": "cda37953aca42a48205c104aca49951add1299bd5952b7b660b88f9aa7cba53a"
+    },
+    {
+      "id": "bf_alice",
+      "file": "bf_alice.wav",
+      "bytes": 357644,
+      "sha256": "e614862380bdc935d9019ee4dd941485a8a484ffc79db8f08208ac2eee9a3f1d"
+    },
+    {
+      "id": "bf_emma",
+      "file": "bf_emma.wav",
+      "bytes": 352844,
+      "sha256": "366d3e0701d87d5a1c221887e296ae462cc323b57456b26772195a078ea147bc"
+    },
+    {
+      "id": "bf_isabella",
+      "file": "bf_isabella.wav",
+      "bytes": 357644,
+      "sha256": "f5fc0f9fa73774799e92cb629fa2f0e33b6312b99e0e4d7e712d2173a90cd12f"
+    },
+    {
+      "id": "bf_lily",
+      "file": "bf_lily.wav",
+      "bytes": 355244,
+      "sha256": "5db02d84582d78ec7a0f61416c3c0c38748a639d5fff054804f089d37ff754d6"
+    },
+    {
+      "id": "bm_daniel",
+      "file": "bm_daniel.wav",
+      "bytes": 348044,
+      "sha256": "dfe066ac3427c9f024d4c2a3b45fee17c2c5ebf0bf858e1cfc7fad4de066fd10"
+    },
+    {
+      "id": "bm_fable",
+      "file": "bm_fable.wav",
+      "bytes": 376844,
+      "sha256": "e80bd0418ee7ec0ffa4d6cca7f3726ef014f5af9a05a159f496ddff42d416c3a"
+    },
+    {
+      "id": "bm_george",
+      "file": "bm_george.wav",
+      "bytes": 386444,
+      "sha256": "140751752907fc62a386974fd7148a3d00670b6444238c4d8de3bbe4276a0696"
+    },
+    {
+      "id": "bm_lewis",
+      "file": "bm_lewis.wav",
+      "bytes": 391244,
+      "sha256": "3a59a9d2de517ce559aa016d081d6d7a34898dd3b229b55c68f2bd2c1391e1a9"
+    }
+  ]
+}
