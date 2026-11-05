@@ -3,57 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f4f7fb">
   <meta name="description" content="Create natural American and British English voiceovers with 28 Kokoro voices, creator presets, SRT and VTT captions, and local WAV or MP3 project exports.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%237c5cff%27/%3E%3Cpath d=%27M20 18h7l10 17V18h7v28h-7L27 29v17h-7z%27 fill=%27white%27/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%232563eb%27/%3E%3Cpath d=%27M20 18h7l10 17V18h7v28h-7L27 29v17h-7z%27 fill=%27white%27/%3E%3C/svg%3E">
   <title>NextGen AI Voiceover — Voiceover Studio</title>
   <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Main navigation">
+    <header class="app-header">
       <a class="brand" href="./" aria-label="NextGen AI Voiceover home">
         <span class="brand-mark" aria-hidden="true">N</span>
         <span class="brand-copy"><strong>NextGen</strong><small>AI VOICEOVER</small></span>
       </a>
-
-      <div class="workspace-label">WORKSPACE</div>
-      <nav class="main-nav">
+      <span class="header-divider" aria-hidden="true"></span>
+      <nav class="main-nav" aria-label="Main navigation">
         <a class="nav-item active" href="#studio" aria-current="page">
           <span class="nav-icon" aria-hidden="true">▤</span>
-          <span>Text to Speech</span>
+          <span>Studio</span>
         </a>
-        <span class="nav-item nav-item-muted" aria-disabled="true" title="Coming later">
-          <span class="nav-icon" aria-hidden="true">◷</span>
-          <span>Projects &amp; history</span>
-          <span class="nav-soon">Soon</span>
-        </span>
       </nav>
-
-      <div class="sidebar-spacer"></div>
-      <div class="sidebar-model">
-        <span class="sidebar-model-dot"></span>
-        <div><strong>Browser engine</strong><small>Kokoro · ONNX · WASM</small></div>
+      <div class="header-spacer"></div>
+      <div class="topbar-status">
+        <span class="engine-label"><span class="engine-dot"></span><span id="engineLabel">Kokoro · English · on device</span></span>
+        <span id="modelBadge" class="badge badge-idle">Loading voice model</span>
       </div>
-      <div class="sidebar-footer">NEXTGEN AI VOICEOVER <span>EARLY ACCESS</span></div>
-    </aside>
+    </header>
 
     <main class="workspace" id="studio">
-      <header class="topbar">
-        <div class="breadcrumb"><span>Workspace</span><span class="crumb-separator">/</span><strong>Text to Speech</strong></div>
-        <div class="topbar-status">
-          <span class="engine-label"><span class="engine-dot"></span><span id="engineLabel">Kokoro · English · local</span></span>
-          <span id="modelBadge" class="badge badge-idle">Model not loaded</span>
-        </div>
-      </header>
-
       <section class="page-heading">
         <div>
-          <p class="eyebrow">VOICEOVER STUDIO</p>
-          <h1>Text to Speech</h1>
-          <p class="page-subtitle">Create English voiceovers with 28 American and British voices. Fine-tune pronunciation and speaking pace, then export each paragraph or one complete narration.</p>
+          <p class="eyebrow">CREATION WORKSPACE</p>
+          <h1>Voiceover Studio</h1>
+          <p class="page-subtitle">Write your script, choose an English voice, and create ready-to-use audio and captions.</p>
         </div>
-        <div class="format-pill"><span class="format-wave" aria-hidden="true">≋</span> English · On-device</div>
+        <div class="format-pill"><span class="format-wave" aria-hidden="true">≋</span> 28 English voices</div>
       </section>
 
       <section class="studio-grid">
@@ -61,51 +46,51 @@
           <section class="panel script-panel" aria-labelledby="scriptHeading">
             <div class="panel-heading">
               <div>
-                <h2 id="scriptHeading">Script</h2>
-                <p>Write or paste your narration below. Use a blank line to start a new paragraph.</p>
+                <h2 id="scriptHeading">Your script</h2>
+                <p>Separate sections with a blank line. The original wording is kept when speech cleanup is enabled.</p>
               </div>
               <button id="clearButton" class="quiet-button" type="button">Clear script</button>
             </div>
 
             <label class="sr-only" for="scriptInput">Voiceover script</label>
-            <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Start writing your voiceover here...&#10;&#10;Separate paragraphs with a blank line. Each paragraph can be generated as its own WAV, and the complete script can be rendered as one voiceover."></textarea>
+            <textarea id="scriptInput" maxlength="20000" spellcheck="true" placeholder="Start writing or paste your narration here…&#10;&#10;Use a blank line to create a separate audio section."></textarea>
 
             <details class="paragraph-editor-tools" id="paragraphEditorDetails">
               <summary>
-                <span><strong>Edit paragraphs individually</strong><small>Reorder, split, merge, and set a different English voice or pace for each section</small></span>
+                <span><strong>Paragraph editor</strong><small>Reorder sections, set per-section voices and pace, or regenerate one section</small></span>
                 <span class="details-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="paragraph-editor-content">
-                <p class="paragraph-editor-note">Per-paragraph voice and pace settings apply to each section file. The combined full-script file uses the studio voice and pace selected on the right.</p>
-                <p id="paragraphEditorStatus" class="paragraph-editor-status" role="status">Add a blank line in your script to create another paragraph.</p>
+                <p class="paragraph-editor-note">Section voice and pace overrides affect individual files. The continuous full-script file uses your studio defaults.</p>
+                <p id="paragraphEditorStatus" class="paragraph-editor-status" role="status">Add a blank line to create another paragraph.</p>
                 <div id="paragraphEditorList" class="paragraph-editor-list"></div>
               </div>
             </details>
 
             <details class="spoken-preview" id="spokenPreview">
-              <summary>Review prepared spoken text <span>Preview automatic pronunciation changes</span></summary>
+              <summary>Review prepared speech <span>See how numbers, names and abbreviations will be read</span></summary>
               <pre id="spokenPreviewText" aria-live="polite">Your prepared spoken script will appear here.</pre>
             </details>
 
             <div class="editor-footer">
-              <span id="paragraphCount">0 paragraphs</span>
-              <span class="footer-divider">·</span>
-              <span id="characterCount">0 / 20,000 characters</span>
-              <span class="editor-spacer"></span>
-              <span id="draftStatus" class="draft-status" role="status">Drafts are saved only in this browser</span>
-              <span>Up to 20,000 characters</span>
+              <div class="editor-counts">
+                <span id="paragraphCount">0 paragraphs</span>
+                <span class="footer-divider">·</span>
+                <span id="characterCount">0 / 20,000 characters</span>
+              </div>
+              <span id="draftStatus" class="draft-status" role="status">Draft saved only in this browser</span>
             </div>
           </section>
 
           <details class="pronunciation-tools">
             <summary>
-              <span><strong>Pronunciation guide</strong><small>Teach the voice how to say names, brands and abbreviations</small></span>
+              <span><strong>Custom pronunciation</strong><small>Set how names, brands and technical terms are spoken</small></span>
               <span class="details-chevron" aria-hidden="true">⌄</span>
             </summary>
             <div class="pronunciation-content">
-              <label for="pronunciationRules">Custom pronunciation rules</label>
+              <label for="pronunciationRules">Pronunciation rules</label>
               <textarea id="pronunciationRules" rows="4" maxlength="4000" spellcheck="false" placeholder="OpenAI = Open A I&#10;YouTube = You Tube&#10;SQL = sequel"></textarea>
-              <p class="pronunciation-hint">One rule per line: <code>word or phrase = how it should sound</code>. Matching is case-insensitive and applies to speech only; your original script stays unchanged. Start a line with # to add a comment.</p>
+              <p class="pronunciation-hint">One rule per line: <code>word or phrase = how it should sound</code>. Rules apply to speech only; the original script stays unchanged. Start a line with # to add a comment.</p>
               <p id="pronunciationStatus" class="pronunciation-status" role="status">No custom pronunciation rules</p>
             </div>
           </details>
@@ -113,16 +98,16 @@
           <section id="resultsPanel" class="panel results-panel" aria-labelledby="resultsHeading" hidden>
             <div class="panel-heading result-heading">
               <div>
-                <p class="eyebrow">GENERATED AUDIO</p>
-                <h2 id="resultsHeading">Your voiceover</h2>
+                <p class="eyebrow">EXPORTS</p>
+                <h2 id="resultsHeading">Generated voiceover</h2>
                 <p id="resultsSummary">Your audio files will appear here.</p>
               </div>
-              <a id="zipDownload" class="button button-secondary zip-button" href="#" download="nextgen-voiceover-project.zip" hidden>Download project ZIP <span aria-hidden="true">↓</span></a>
+              <a id="zipDownload" class="button button-secondary zip-button" href="#" download="nextgen-voiceover-project.zip" hidden>Download project ZIP ↓</a>
             </div>
             <div id="audioResults" class="audio-results"></div>
             <div id="subtitleDownloads" class="subtitle-downloads" hidden>
               <div class="subtitle-download-heading">
-                <strong>Caption files</strong>
+                <strong>Captions</strong>
                 <small>Timed against the finished full-script audio</small>
               </div>
               <div class="subtitle-download-links">
@@ -130,48 +115,48 @@
                 <a id="vttDownload" class="button button-secondary" href="#" download="full_script.vtt">Download VTT</a>
               </div>
               <p id="subtitleStatus" class="subtitle-status" role="status">Caption timing is being prepared.</p>
-              <p class="subtitle-caveat">Cue timing is estimated from the audio duration and phrase length, not word-level speech alignment. Review the files in your video editor before publishing.</p>
+              <p class="subtitle-caveat">Cue timing is estimated from the audio duration and phrase length, not word-level speech alignment. Review before publishing.</p>
             </div>
           </section>
 
           <details class="benchmark-tools" id="voiceBenchmark">
             <summary>
-              <span><strong>Compare all 28 English voices</strong><small>Generate the same sample with every voice and audition the results side by side</small></span>
+              <span><strong>Compare English voices</strong><small>Generate and audition the same sample with all 28 voices</small></span>
               <span class="details-chevron" aria-hidden="true">⌄</span>
             </summary>
             <div class="benchmark-content">
               <div class="field">
-                <label for="benchmarkPreset">Benchmark script</label>
+                <label for="benchmarkPreset">Sample type</label>
                 <select id="benchmarkPreset">
                   <option value="balanced">Balanced narration</option>
                   <option value="creator">Creator / energetic</option>
                   <option value="technical">Technical explanation</option>
                 </select>
               </div>
-              <label class="sr-only" for="benchmarkScript">Voice benchmark text</label>
+              <label class="sr-only" for="benchmarkScript">Voice comparison text</label>
               <textarea id="benchmarkScript" class="benchmark-script-input" rows="4" maxlength="1200">Hi there, and welcome back. Today, we're looking at a simple idea that can make a big difference. In 2026, this feature costs $12.50, saves 25% of your time, and works in just 3 minutes. Try it for yourself, and tell me what you think.</textarea>
-              <p class="benchmark-hint">Each voice uses the same text, speaking pace, and pronunciation rules. This creates 28 local WAV previews and may take several minutes. No audio is uploaded.</p>
+              <p class="benchmark-hint">Creates 28 local WAV previews and may take several minutes.</p>
               <div class="benchmark-actions">
-                <button id="runBenchmarkButton" class="button button-secondary" type="button" disabled>Generate 28-voice comparison</button>
+                <button id="runBenchmarkButton" class="button button-secondary" type="button" disabled>Compare all 28 voices</button>
                 <button id="stopBenchmarkButton" class="button button-secondary" type="button" hidden disabled>Stop comparison</button>
               </div>
-              <p id="benchmarkStatus" class="benchmark-status" role="status">Load the model to compare the English voices.</p>
+              <p id="benchmarkStatus" class="benchmark-status" role="status">Load the model to compare voices.</p>
               <div id="benchmarkResults" class="benchmark-results" aria-live="polite"></div>
             </div>
           </details>
-
-          <div class="privacy-note"><span aria-hidden="true">◈</span> Your script and pronunciation rules stay in this browser. Speech is generated locally; model files are downloaded to your browser cache.</div>
         </div>
 
-        <aside class="settings-column" aria-label="Voice and generation settings">
+        <aside class="settings-column" aria-label="Voice and export settings">
           <section class="panel settings-panel">
             <div class="settings-title">
-              <div><p class="eyebrow">CONFIGURE</p><h2>Voice settings</h2></div>
-              <span class="settings-spark" aria-hidden="true">✳</span>
+              <div>
+                <p class="eyebrow">STUDIO DEFAULTS</p>
+                <h2>Voice setup</h2>
+              </div>
             </div>
 
-            <div class="field">
-              <label for="voiceFilterSelect">Show voices</label>
+            <div class="field voice-filter-field">
+              <label for="voiceFilterSelect">Browse voices</label>
               <select id="voiceFilterSelect">
                 <option value="all" selected>All English voices · 28</option>
                 <option value="american">American English</option>
@@ -180,15 +165,14 @@
                 <option value="male">Male voices</option>
                 <option value="favorites">Favorite voices</option>
               </select>
-              <small>Filter by accent, voice type or your saved favourites.</small>
             </div>
 
-            <div class="field">
-              <label for="voiceSelect">English voice</label>
+            <div class="field voice-select-field">
+              <label for="voiceSelect">Selected voice</label>
               <select id="voiceSelect" disabled>
-                <option value="">Voice list loads automatically…</option>
+                <option value="">Loading English voices…</option>
               </select>
-              <small id="voiceHelp">28 American and British English voices · generated locally in your browser.</small>
+              <small id="voiceHelp">28 American and British English voices · generated on device.</small>
               <small id="recentVoiceHelp" class="recent-voice-help">Recently used: none yet.</small>
             </div>
 
@@ -209,62 +193,60 @@
               </div>
             </div>
 
-            <div class="field speech-enhancement-field">
-              <label class="toggle-row" for="enhanceSpokenText">
-                <input id="enhanceSpokenText" type="checkbox" checked>
-                <span><strong>Smart spoken-text cleanup</strong><small>Speak dates, currencies, numbers, measurements and common acronyms naturally. Your written script stays unchanged.</small></span>
-              </label>
-            </div>
-
-            <div class="settings-divider"></div>
-            <div class="field output-format-field">
-              <label for="outputFormat">Output format</label>
-              <select id="outputFormat">
-                <option value="wav" selected>WAV · Lossless / larger files</option>
-                <option value="mp3">MP3 · Compressed / smaller files</option>
-              </select>
-              <small>Applies to paragraph files, the full-script file, and the ZIP bundle.</small>
-            </div>
-            <div class="creator-export-settings">
-              <div class="field">
-                <label for="creatorPreset">Creator preset</label>
-                <select id="creatorPreset">
-                  <option value="shorts" selected>Shorts / Reels · Vertical 9:16</option>
-                  <option value="longform">Long-form video · 16:9</option>
-                  <option value="podcast">Podcast · 16:9</option>
-                  <option value="narration">Narration · Wide captions</option>
-                </select>
-                <small>Sets the caption layout and project metadata. It does not render or resize video.</small>
+            <details class="advanced-settings" id="advancedSettings">
+              <summary>
+                <span><strong>Speech &amp; export options</strong><small>Cleanup, file format and creator settings</small></span>
+                <span class="details-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="advanced-settings-content">
+                <div class="field speech-enhancement-field">
+                  <label class="toggle-row" for="enhanceSpokenText">
+                    <input id="enhanceSpokenText" type="checkbox" checked>
+                    <span><strong>Smart speech cleanup</strong><small>Read dates, currencies, numbers, measurements and acronyms naturally.</small></span>
+                  </label>
+                </div>
+                <div class="field output-format-field">
+                  <label for="outputFormat">Audio format</label>
+                  <select id="outputFormat">
+                    <option value="wav" selected>WAV · Lossless</option>
+                    <option value="mp3">MP3 · Smaller file</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="creatorPreset">Creator preset</label>
+                  <select id="creatorPreset">
+                    <option value="shorts" selected>Shorts / Reels · 9:16</option>
+                    <option value="longform">Long-form video · 16:9</option>
+                    <option value="podcast">Podcast · 16:9</option>
+                    <option value="narration">Narration · Wide captions</option>
+                  </select>
+                  <small>Sets caption layout and project metadata; it does not render video.</small>
+                </div>
+                <label class="toggle-row export-toggle" for="normalizeAudio">
+                  <input id="normalizeAudio" type="checkbox">
+                  <span><strong>Level audio</strong><small>Approx. −18 dBFS RMS, peak-limited to −1 dBFS.</small></span>
+                </label>
+                <label class="toggle-row export-toggle" for="trimSilence">
+                  <input id="trimSilence" type="checkbox">
+                  <span><strong>Trim edge silence</strong><small>Keep a short natural buffer at the beginning and end.</small></span>
+                </label>
               </div>
-              <label class="toggle-row export-toggle" for="normalizeAudio">
-                <input id="normalizeAudio" type="checkbox">
-                <span><strong>Level audio</strong><small>Approx. −18 dBFS RMS with a −1 dBFS peak ceiling. This is not certified LUFS mastering.</small></span>
-              </label>
-              <label class="toggle-row export-toggle" for="trimSilence">
-                <input id="trimSilence" type="checkbox">
-                <span><strong>Trim edge silence</strong><small>Remove very quiet leading and trailing audio while retaining a short natural buffer.</small></span>
-              </label>
-            </div>
-            <div class="output-setting">
-              <div><strong>Generation mode</strong><small>Paragraphs + full script + creator package</small></div>
-              <span class="local-tag"><span></span> Local</span>
-            </div>
+            </details>
 
-            <button id="loadButton" class="button button-secondary load-button" type="button">Load Kokoro voice model</button>
-            <button id="generateButton" class="button button-primary generate-button" type="button" disabled>
-              <span aria-hidden="true">✦</span> Generate voiceover
-            </button>
-            <button id="cancelButton" class="button button-secondary cancel-button" type="button" hidden disabled>Stop generation</button>
+            <div class="generation-actions">
+              <button id="loadButton" class="button button-quiet load-button" type="button">Load voice model</button>
+              <button id="generateButton" class="button button-primary generate-button" type="button" disabled>Generate voiceover</button>
+              <button id="cancelButton" class="button button-danger cancel-button" type="button" hidden disabled>Stop generation</button>
+            </div>
 
             <div class="progress-wrap" aria-live="polite">
+              <div class="progress-heading"><span>Generation progress</span></div>
               <div class="progress-track" role="progressbar" aria-label="Generation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
                 <div id="progressBar" class="progress-bar"></div>
               </div>
-              <p id="statusMessage" class="status" role="status">Load the voice model to get started.</p>
+              <p id="statusMessage" class="status" role="status">Preparing the English voice model…</p>
             </div>
           </section>
-
-          <div class="settings-footnote">Powered by Kokoro 82M · ONNX q8 · WebAssembly. The model is automatically restored on startup and cached in this browser after its first download.</div>
         </aside>
       </section>
     </main>

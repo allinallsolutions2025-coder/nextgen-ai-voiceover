@@ -75,7 +75,7 @@ async function inspectAudio(page, selector, index = null) {
 
 try {
   browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-  const context = await browser.newContext({ acceptDownloads: true });
+  const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1366, height: 768 } });
   const page = await context.newPage();
 
   page.on("pageerror", error => report.errors.push("pageerror: " + error.message));
@@ -104,8 +104,42 @@ try {
   assert.match(report.checks.pageTitle, /NextGen AI Voiceover/i);
   report.checks.applicationShellLoaded = await page.locator("#scriptInput").count() === 1;
   assert.equal(report.checks.applicationShellLoaded, true, "Application shell was not found.");
-  report.checks.elevenLabsInspiredWorkspace = await page.locator(".sidebar .main-nav .nav-item.active").count() === 1;
-  assert.equal(report.checks.elevenLabsInspiredWorkspace, true, "Studio sidebar navigation did not render.");
+  report.checks.professionalHeaderNavigation = await page.locator(".app-header .main-nav .nav-item.active").count() === 1;
+  assert.equal(report.checks.professionalHeaderNavigation, true, "Compact studio header navigation did not render.");
+  report.checks.legacySidebarRemoved =
+    await page.locator(".sidebar, .nav-item-muted, .nav-soon, .sidebar-footer").count() === 0;
+  assert.equal(report.checks.legacySidebarRemoved, true, "Legacy sidebar and placeholder navigation should be removed.");
+  const desktopLayout = await page.evaluate(() => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const editor = document.querySelector(".editor-column").getBoundingClientRect();
+    const settings = document.querySelector(".settings-column").getBoundingClientRect();
+    return {
+      viewport,
+      editorWidth: Math.round(editor.width),
+      settingsWidth: Math.round(settings.width),
+      horizontalOverflow: document.documentElement.scrollWidth > viewport.width,
+      sideBySide: settings.left > editor.left && settings.left >= editor.right - 2
+    };
+  });
+  report.desktopLayout1366x768 = desktopLayout;
+  assert.equal(desktopLayout.viewport.width, 1366, "Desktop check should run at 1366px width.");
+  assert.equal(desktopLayout.viewport.height, 768, "Desktop check should run at 768px height.");
+  assert.equal(desktopLayout.horizontalOverflow, false, "Studio should not overflow horizontally at a Windows desktop size.");
+  assert.equal(desktopLayout.sideBySide, true, "Editor and settings should fit side by side on a desktop.");
+  assert.ok(desktopLayout.editorWidth >= 650, "The script editor should have adequate desktop width.");
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const wideLayout = await page.evaluate(() => ({
+    width: window.innerWidth,
+    horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+    sideBySide: document.querySelector(".settings-column").getBoundingClientRect().left >
+      document.querySelector(".editor-column").getBoundingClientRect().left
+  }));
+  report.desktopLayout1920x1080 = wideLayout;
+  assert.equal(wideLayout.width, 1920);
+  assert.equal(wideLayout.horizontalOverflow, false);
+  assert.equal(wideLayout.sideBySide, true);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  report.checks.windowsDesktopLayoutFits = true;
   report.checks.diagnosticsRemoved =
     await page.locator("#metricsHeading, #modelLoadMetric, #synthesisMetric, #totalMetric").count() === 0;
   assert.equal(report.checks.diagnosticsRemoved, true, "Performance diagnostics should be absent.");
@@ -187,6 +221,7 @@ try {
   report.checks.creatorExportControlsPresent =
     await page.locator("#creatorPreset, #normalizeAudio, #trimSilence, #srtDownload, #vttDownload").count() === 5;
   assert.equal(report.checks.creatorExportControlsPresent, true, "Creator export controls are missing.");
+  await page.locator("#advancedSettings summary").click();
   assert.equal(await page.locator("#creatorPreset option").count(), 4, "Expected four creator caption presets.");
   await page.locator("#creatorPreset").selectOption("shorts");
   await page.locator("#normalizeAudio").check();
@@ -264,6 +299,7 @@ try {
   assert.equal(await page.locator(".paragraph-editor-speed").nth(0).inputValue(), "1.15",
     "Paragraph pace override was not restored after reload.");
   report.checks.paragraphOverridesRestored = true;
+  await page.locator("#advancedSettings summary").click();
   assert.equal(await page.locator("#creatorPreset").inputValue(), "shorts",
     "Creator preset was not restored after reload.");
   assert.equal(await page.locator("#normalizeAudio").isChecked(), true,
