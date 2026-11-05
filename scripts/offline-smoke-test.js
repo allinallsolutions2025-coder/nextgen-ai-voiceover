@@ -105,7 +105,7 @@ try {
     }
   });
 
-  const navigation = await page.goto(origin, { waitUntil: "domcontentloaded", timeout: 30000 });
+  const navigation = await page.goto(origin + "/?offline-test=1", { waitUntil: "domcontentloaded", timeout: 30000 });
   assert.equal(navigation.status(), 200);
   report.checks.appShellLoaded = await page.locator("#scriptInput").count() === 1;
   assert.equal(report.checks.appShellLoaded, true);
