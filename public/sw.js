@@ -20,7 +20,9 @@ self.addEventListener("install", (event) => {
       scope,
       new URL("index.html", scope).href,
       new URL("manifest.webmanifest", scope).href,
-      new URL("icon.svg", scope).href
+      new URL("icon.svg", scope).href,
+      new URL("icon-192.png", scope).href,
+      new URL("icon-512.png", scope).href
     ]);
     await self.skipWaiting();
   })());
