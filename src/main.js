@@ -593,7 +593,8 @@ async function getTTS() {
       state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
-        device: "wasm"
+        device: "wasm",
+        voicePath: new URL("../models/onnx-community/Kokoro-82M-v1.0-ONNX/voices/", import.meta.url).href
       });
     })().then((tts) => {
       state.tts = tts;
