@@ -1,7 +1,7 @@
 // English-first browser-local voiceover studio.
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
-import { normalizeVoiceCatalog } from "./lib/voice-catalog.js";
+import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";
 import { prepareNarrationText, splitNarrationSections } from "./lib/narration.js";
 import { processAudioSamples } from "./lib/audio-processing.js";
 import { getAudioDurationSeconds } from "./lib/audio-metadata.js";
@@ -14,6 +14,7 @@ import { Capacitor } from "@capacitor/core";
 import { env as transformersEnv } from "@huggingface/transformers";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+const MODEL_REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 const KOKORO_PACKAGE = "kokoro-js@1.2.1";
 const OFFLINE_TEST = new URLSearchParams(location.search).has("offline-test");
 const PACKAGED_RUNTIME = location.protocol === "app:" || Capacitor.isNativePlatform() || OFFLINE_TEST;
@@ -25,7 +26,7 @@ const RECENT_VOICES_STORAGE_KEY = "nextgen-voiceover-recent-voices-v1";
 const PARAGRAPH_SETTINGS_STORAGE_KEY = "nextgen-voiceover-paragraph-settings-v1";
 const CREATOR_EXPORT_SETTINGS_KEY = "nextgen-voiceover-creator-export-v1";
 const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
-const VOICE_PREVIEW_CACHE_VERSION = 1;
+const VOICE_PREVIEW_CACHE_VERSION = 2;
 const VOICE_PREVIEW_DB_NAME = "nextgen-voiceover-voice-previews-v1";
 const VOICE_PREVIEW_STORE_NAME = "voice-previews";
 
@@ -133,6 +134,8 @@ const state = {
   objectUrls: [],
   voicePreviewDbPromise: null,
   voicePreviewBlobs: new Map(),
+  voicePreviewBundledIds: new Set(),
+  voicePreviewLibraryPromise: null,
   voicePreviewObjectUrls: new Map(),
   voicePreviewPersistedIds: new Set(),
   voicePreviewFailedIds: new Set(),
@@ -564,9 +567,10 @@ function toggleFavoriteVoice() {
 
 function updatePreviewButtonState() {
   const voice = elements.voiceSelect.value;
-  const voiceAvailable = Boolean(state.tts && voice && state.supportedVoiceIds.has(voice));
+  const voiceAvailable = Boolean(voice && state.supportedVoiceIds.has(voice));
+  const previewReady = Boolean(voiceAvailable && (state.tts || state.voicePreviewBlobs.has(voice)));
   const busy = state.isGenerating || state.isPreviewing;
-  elements.previewVoiceButton.disabled = !voiceAvailable || busy;
+  elements.previewVoiceButton.disabled = !previewReady || busy;
   elements.favoriteVoiceButton.disabled = !voiceAvailable || busy;
   const favorite = state.favoriteVoiceIds.has(voice);
   elements.favoriteVoiceButton.setAttribute("aria-pressed", String(favorite));
@@ -621,7 +625,8 @@ async function getTTS() {
       state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
-        device: "wasm"
+        device: "wasm",
+        revision: MODEL_REVISION
       });
     })().then((tts) => {
       state.tts = tts;
@@ -825,7 +830,7 @@ async function loadModel() {
     const tts = await getTTS();
     populateVoiceSelector(tts);
     setBadge("Model ready", "ready");
-    setStatus("Your 28 English voices are ready. Their short previews are preparing in the background.", "good");
+    setStatus("Your 28 English voices are ready. Pre-generated voice previews are already available.", "good");
     elements.generateButton.disabled = !state.voiceCatalog.length;
     updateBenchmarkButtonState();
     setProgress(100);
@@ -1254,16 +1259,20 @@ function setBenchmarkStatus(message, kind = "normal") {
   elements.benchmarkStatus.className = "benchmark-status" + (kind === "error" ? " status-error" : kind === "good" ? " status-good" : "");
 }
 function previewCard(id) { return [...elements.benchmarkResults.children].find(card => card.dataset.voiceId === id) || null; }
-function setPreviewReady(voice, blob, persisted = false) {
+function setPreviewReady(voice, blob, persisted = false, bundled = false) {
   state.voicePreviewBlobs.set(voice.id, blob);
   state.voicePreviewFailedIds.delete(voice.id);
   if (persisted) state.voicePreviewPersistedIds.add(voice.id);
+  if (bundled) state.voicePreviewBundledIds.add(voice.id);
   const card = previewCard(voice.id);
   if (!card) return;
   let url = state.voicePreviewObjectUrls.get(voice.id);
   if (!url) { url = URL.createObjectURL(blob); state.voicePreviewObjectUrls.set(voice.id,url); }
   card.classList.remove("benchmark-card-error"); card.classList.add("benchmark-card-ready");
-  card.querySelector(".benchmark-card-state").textContent = persisted ? "Ready · saved on this device" : "Ready · this session";
+  const label = state.voicePreviewBundledIds.has(voice.id)
+    ? "Ready · bundled with app"
+    : persisted ? "Ready · saved on this device" : "Ready · this session";
+  card.querySelector(".benchmark-card-state").textContent = label;
   const audio = card.querySelector("audio"); audio.src = url; audio.hidden = false;
   const link = card.querySelector("a"); link.href = url; link.hidden = false;
 }
@@ -1288,6 +1297,56 @@ function renderVoicePreviewCards() {
   }
   updateBenchmarkButtonState();
 }
+
+async function loadStaticVoicePreviewLibrary() {
+  try {
+    const manifestUrl = new URL("./voice-previews/manifest.json", document.baseURI);
+    const manifestResponse = await fetch(manifestUrl, { cache: "no-cache" });
+    if (!manifestResponse.ok) {
+      setBenchmarkStatus("Pre-generated previews are not published yet. The app will prepare any missing previews after the model loads.");
+      return 0;
+    }
+    const manifest = await manifestResponse.json();
+    if (manifest.modelId !== MODEL_ID ||
+        manifest.modelRevision !== MODEL_REVISION ||
+        manifest.previewVersion !== VOICE_PREVIEW_CACHE_VERSION ||
+        !Array.isArray(manifest.previews)) {
+      throw new Error("The saved voice preview library does not match this app version.");
+    }
+
+    const db = await getVoicePreviewDatabase();
+    const results = await Promise.allSettled(manifest.previews.map(async (entry) => {
+      if (!entry || !state.supportedVoiceIds.has(entry.id) ||
+          !/^[ab][fm]_[a-z0-9_]+\.wav$/.test(String(entry.file || ""))) return false;
+      const voice = state.voiceCatalog.find(item => item.id === entry.id);
+      if (!voice) return false;
+      const response = await fetch(new URL(entry.file, manifestUrl), { cache: "force-cache" });
+      if (!response.ok) throw new Error("Could not load preview " + entry.id + " (HTTP " + response.status + ").");
+      const blob = await response.blob();
+      if (blob.size < 44) throw new Error("Preview " + entry.id + " is empty or incomplete.");
+      const saved = await saveVoicePreviewCache(entry.id, blob, db);
+      setPreviewReady(voice, blob, saved, true);
+      return true;
+    }));
+
+    const loaded = results.filter(result => result.status === "fulfilled" && result.value).length;
+    for (const result of results) {
+      if (result.status === "rejected") console.warn("A bundled voice preview could not be loaded.", result.reason);
+    }
+    if (loaded === state.voiceCatalog.length) {
+      setBenchmarkStatus("All " + loaded + " pre-generated English voice previews are loaded and ready.", "good");
+    } else {
+      setBenchmarkStatus(loaded + " of " + state.voiceCatalog.length + " bundled previews are ready. Missing voices can be prepared by the model.", loaded ? "good" : "error");
+    }
+    updateBenchmarkButtonState();
+    return loaded;
+  } catch (error) {
+    console.warn("The bundled voice preview library could not be loaded.", error);
+    setBenchmarkStatus("Could not load the saved preview library: " + (error?.message || String(error)), "error");
+    return 0;
+  }
+}
+
 function getVoicePreviewDatabase() {
   if(!("indexedDB" in window))return Promise.resolve(null);
   if(!state.voicePreviewDbPromise)state.voicePreviewDbPromise=new Promise((resolve,reject)=>{
@@ -1325,6 +1384,12 @@ function resumeVoicePreviewPreparation() {
 }
 async function runVoiceBenchmark({retryFailures=false}={}) {
   if(!state.tts||!state.voiceCatalog.length||state.isGenerating||state.isPreviewing)return;
+  if(state.voicePreviewLibraryPromise) await state.voicePreviewLibraryPromise;
+  if(state.voicePreviewBlobs.size >= state.voiceCatalog.length) {
+    setBenchmarkStatus("All " + state.voiceCatalog.length + " pre-generated English voice previews are loaded and ready.", "good");
+    updateBenchmarkButtonState();
+    return;
+  }
   if(state.voicePreviewPreparePromise)return state.voicePreviewPreparePromise;
   if(retryFailures)state.voicePreviewFailedIds.clear();
   state.voicePreviewUserPaused=false;
@@ -1652,6 +1717,11 @@ restoreSpokenTextPreference();
 restoreVoicePreferences();
 restoreParagraphSettings();
 restoreCreatorExportSettings();
+state.voiceCatalog = getCompleteVoiceCatalog();
+state.supportedVoiceIds = new Set(state.voiceCatalog.map(voice => voice.id));
+renderVoiceSelector();
+renderVoicePreviewCards();
+state.voicePreviewLibraryPromise = loadStaticVoicePreviewLibrary();
 updateScriptCounts();
 renderParagraphEditor();
 updateSpokenTextPreview();

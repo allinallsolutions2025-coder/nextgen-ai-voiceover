@@ -119,18 +119,18 @@
             </div>
           </section>
 
-          <details class="benchmark-tools" id="voiceBenchmark">
+          <details class="benchmark-tools" id="voiceBenchmark" open>
             <summary>
-              <span><strong>All 28 English voice previews</strong><small>Prepared automatically and saved in this browser for instant playback on future visits</small></span>
+              <span><strong>All 28 English voice previews</strong><small>Pre-generated WAV samples bundled with the app for instant playback</small></span>
               <span class="details-chevron" aria-hidden="true">⌄</span>
             </summary>
             <div class="benchmark-content">
-              <p class="benchmark-hint">Every voice uses the same short sample so you can compare American and British accents consistently. The first preparation runs in the background and pauses while you generate your own voiceover.</p>
+              <p class="benchmark-hint">Every voice uses the same pre-generated sample so you can compare American and British accents consistently. These saved WAV files are available as soon as the studio opens, without waiting for the speech model to finish loading.</p>
               <div class="benchmark-actions">
                 <button id="runBenchmarkButton" class="button button-secondary" type="button" disabled>Prepare missing previews</button>
                 <button id="stopBenchmarkButton" class="button button-secondary" type="button" hidden disabled>Pause preparation</button>
               </div>
-              <p id="benchmarkStatus" class="benchmark-status" role="status">Voice previews will prepare automatically after the model loads.</p>
+              <p id="benchmarkStatus" class="benchmark-status" role="status">Loading the saved voice preview library…</p>
               <div id="benchmarkResults" class="benchmark-results" aria-live="polite"></div>
             </div>
           </details>
