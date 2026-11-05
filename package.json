@@ -1,15 +1,81 @@
 {
   "name": "nextgen-ai-voiceover",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "English-first browser-based Kokoro voiceover studio for NextGen AI Voiceover",
-  "scripts": {
-    "check": "node --check src/main.js && node --check src/lib/text.js && node --check src/lib/pronunciation.js && node --check src/lib/voice-catalog.js && node --check src/lib/narration.js && node --check src/lib/paragraph-editor.js && node --check src/lib/subtitles.js && node --check src/lib/audio-processing.js && node --check src/lib/audio-metadata.js && node --check scripts/check-build.js && node --check scripts/build-site.js && node --check scripts/pages-smoke-test.js",
-    "test": "node --test tests/*.test.js",
-    "build": "node scripts/build-site.js"
-  },
+  "main": "electron/main.cjs",
+  "description": "English-first local Kokoro voiceover studio with PWA, Android and desktop builds",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "check": "node --check src/main.js && node --check src/lib/text.js && node --check src/lib/pronunciation.js && node --check src/lib/voice-catalog.js && node --check src/lib/narration.js && node --check src/lib/paragraph-editor.js && node --check src/lib/subtitles.js && node --check src/lib/audio-processing.js && node --check src/lib/audio-metadata.js && node --check scripts/check-build.js && node --check scripts/build-site.js && node --check scripts/pages-smoke-test.js && node --check scripts/download-model.js && node --check scripts/copy-ort-assets.js && node --check electron/main.cjs && node --check vite.config.js && node scripts/generate-pwa-icons.js && node scripts/check-build.js",
+    "test": "node --test tests/*.test.js",
+    "prebuild": "node scripts/generate-pwa-icons.js && node scripts/copy-ort-assets.js",
+    "build": "vite build",
+    "model:download": "node scripts/download-model.js",
+    "build:offline": "npm run model:download && npm run build",
+    "android:add": "npx cap add android",
+    "android:sync": "npm run build:offline && npx cap sync android",
+    "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "desktop:dev": "npm run build && electron .",
+    "desktop:package": "electron-builder --publish never"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "jszip": "3.10.1",
+    "kokoro-js": "1.2.1",
+    "lamejs": "1.2.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1",
+    "vite": "^7.2.2"
+  },
+  "build": {
+    "appId": "com.nextgen.voiceover",
+    "productName": "NextGen AI Voiceover",
+    "directories": {
+      "output": "release"
+    },
+    "asar": false,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "category": "AudioVideo",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   }
 }

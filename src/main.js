@@ -10,11 +10,11 @@ import {
   mergeParagraphWithNext, moveParagraph, reconcileParagraphs,
   serializeParagraphs, splitParagraph
 } from "./lib/paragraph-editor.js";
+import { Capacitor } from "@capacitor/core";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
-const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
-const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
+const KOKORO_PACKAGE = "kokoro-js@1.2.1";
+const PACKAGED_RUNTIME = location.protocol === "app:" || Capacitor.isNativePlatform();
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
@@ -26,6 +26,14 @@ const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 const VOICE_PREVIEW_CACHE_VERSION = 1;
 const VOICE_PREVIEW_DB_NAME = "nextgen-voiceover-voice-previews-v1";
 const VOICE_PREVIEW_STORE_NAME = "voice-previews";
+
+if (("https:" === location.protocol || location.hostname === "localhost") &&
+    "serviceWorker" in navigator && !Capacitor.isNativePlatform()) {
+  const serviceWorkerUrl = new URL("../sw.js", import.meta.url);
+  const serviceWorkerScope = new URL("../", import.meta.url).pathname;
+  navigator.serviceWorker.register(serviceWorkerUrl, { scope: serviceWorkerScope })
+    .catch(error => console.warn("Offline app installation is unavailable in this browser:", error));
+}
 
 const elements = {
   modelBadge: document.querySelector("#modelBadge"),
@@ -564,7 +572,7 @@ async function getTTS() {
     state.ttsPromise = (async () => {
       setBadge("Loading model", "loading");
       setStatus("Restoring the voice model from this browser’s saved cache. The first visit downloads it; later visits reuse the cached model files.");
-      const module = await import(KOKORO_CDN);
+      const module = await import("kokoro-js");
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
       if (!module.TextSplitterStream) throw new Error("The selected Kokoro.js module does not expose TextSplitterStream.");
       // Transformers.js caches model and WASM files through the browser Cache API by default.
@@ -572,6 +580,13 @@ async function getTTS() {
       if (module.env) {
         module.env.useBrowserCache = true;
         module.env.useWasmCache = true;
+        module.env.allowLocalModels = true;
+        module.env.localModelPath = new URL("../models/", import.meta.url).href;
+        if (module.env.backends?.onnx?.wasm) {
+          module.env.backends.onnx.wasm.wasmPaths = new URL("../ort/", import.meta.url).href;
+        }
+        // Native builds ship the model and runtime with the installer. Never fall back to the network there.
+        if (PACKAGED_RUNTIME) module.env.allowRemoteModels = false;
       }
       state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
@@ -593,15 +608,12 @@ async function getTTS() {
 async function getLameJS() {
   if (window.lamejs?.Mp3Encoder) return window.lamejs;
   if (!state.lamePromise) {
-    state.lamePromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = LAMEJS_CDN;
-      script.async = true;
-      script.onload = () => window.lamejs?.Mp3Encoder
-        ? resolve(window.lamejs)
-        : reject(new Error("The MP3 encoder loaded without exposing lamejs.Mp3Encoder."));
-      script.onerror = () => reject(new Error("Could not load the browser MP3 encoder. Check your connection and retry."));
-      document.head.append(script);
+    state.lamePromise = import("lamejs").then((module) => {
+      const encoder = module.default || module;
+      window.lamejs = encoder;
+      if (!window.lamejs?.Mp3Encoder && module.Mp3Encoder) window.lamejs = module;
+      if (!window.lamejs?.Mp3Encoder) throw new Error("The bundled MP3 encoder did not expose lamejs.Mp3Encoder.");
+      return window.lamejs;
     }).catch((error) => {
       state.lamePromise = null;
       throw error;
@@ -612,7 +624,7 @@ async function getLameJS() {
 
 async function getJSZip() {
   if (!state.jsZipPromise) {
-    state.jsZipPromise = import(JSZIP_CDN)
+    state.jsZipPromise = import("jszip")
       .then((module) => module.default || module)
       .catch((error) => {
         state.jsZipPromise = null;

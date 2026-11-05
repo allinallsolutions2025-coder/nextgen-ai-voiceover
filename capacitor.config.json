@@ -1,0 +1,9 @@
+{
+  "appId": "com.nextgen.voiceover",
+  "appName": "NextGen AI Voiceover",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}

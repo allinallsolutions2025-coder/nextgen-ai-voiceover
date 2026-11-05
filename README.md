@@ -1,12 +1,12 @@
 # NextGen AI Voiceover
 
-An English-first, browser-based text-to-speech studio powered by Kokoro. It focuses on natural American and British English narration rather than a multilingual voice catalogue.
+An English-first, local text-to-speech studio powered by Kokoro. The same application codebase supports the browser/PWA, Windows, macOS, Linux and Android. iPhone/iPad distribution is intentionally not included. It focuses on natural American and British English narration rather than a multilingual voice catalogue.
 
 ## English voice engine
 
 **Kokoro.js 1.2.1** runs the Kokoro-82M q8 ONNX model locally in the browser through WebAssembly. The product exposes 28 English voices: American English and British English, with female and male voices in both accent groups. Non-English Kokoro IDs are excluded from the public voice selector.
 
-The app restores the model automatically and enables browser caching. The first visit downloads the voice model and runtime assets, then prepares the 28 short voice previews in the background; later visits can reuse both the model cache and saved preview audio. No speech API key or remote speech server is needed for generation.
+The browser app loads the model from Hugging Face on first use and caches it through the browser model cache and the service worker runtime cache. The installable PWA shell and ONNX Runtime WebAssembly files are bundled with the site. Windows/macOS/Linux desktop installers and the Android build download and package the English q8 model, all 28 English voice packs, the Kokoro.js runtime, ZIP/MP3 libraries and ONNX Runtime WebAssembly assets. Native builds are configured to use those local files without falling back to remote model downloads. No speech API key or speech server is needed for generation.
 
 ## Studio interface
 
@@ -43,10 +43,10 @@ Speech synthesis runs locally in the browser. Your script and pronunciation repl
 
 ## Run locally
 
-Use Node.js 24 or later:
+Use Node.js 24 or later. Use `npm install` because this cross-platform build adds native and bundling dependencies:
 
 ```bash
-npm ci
+npm install
 npm run check
 npm test
 npm run build
@@ -58,8 +58,35 @@ Serve the project root over localhost:
 python -m http.server 4173
 ```
 
-Open http://localhost:4173 in Chrome or Edge. The site automatically loads the English Kokoro model when the page starts.
+Open http://localhost:4173 in Chrome or Edge. The installable PWA shell and ONNX Runtime WASM files are local; the browser downloads and caches the English Kokoro model on first use.
 
+
+## Installable and native builds
+
+The same Vite application is used by all supported targets. The repository intentionally has **no iOS/iPadOS target or Capacitor iOS dependency**.
+
+| Target | Output | Build path |
+| --- | --- | --- |
+| Browser | Existing hosted site | GitHub Pages |
+| PWA | Installable browser app; offline shell and cached model/runtime after first load | `npm run build` |
+| Windows | NSIS `.exe` installer | `npm run build:offline` then `npm run desktop:package` on Windows |
+| macOS | `.dmg` installer | `npm run build:offline` then `npm run desktop:package` on macOS |
+| Linux | AppImage and `.deb` | `npm run build:offline` then `npm run desktop:package` on Linux |
+| Android | APK (debug by default in CI) | `npm run build:offline`, `npx cap add android`, `npx cap sync android`, then build with Gradle |
+
+### Model packaging
+
+`npm run build:offline` downloads a pinned Hugging Face revision of `onnx-community/Kokoro-82M-v1.0-ONNX`, selects the q8 quantized ONNX graph and includes only the 28 American/British English voice packs used by the app. It also copies the ONNX Runtime WebAssembly files from the installed Transformers.js dependency. The quantized model graph is approximately 88 MB before voice packs, JavaScript, and runtime assets; installers will be larger. The build writes a model manifest with the source revision and asset list.
+
+The PWA does not include the large model in the GitHub Pages artifact. It downloads the model on first use and relies on the Transformers.js browser cache plus service-worker runtime caching for later offline sessions. Native desktop and Android packages bundle the model and runtime so speech generation can run without a model download after installation.
+
+For an Android APK, use Android Studio/Gradle with JDK 21. The included GitHub Actions workflow creates a debug APK artifact; public Play Store distribution needs a separately signed release build and signing credentials. Desktop installers are currently unsigned unless you provide the relevant Windows/macOS signing certificates.
+
+### CI packaging workflows
+
+- **Build desktop installers** — manual workflow dispatch or a `v*` tag; creates Windows, macOS and Linux artifacts on native runners.
+- **Build Android APK** — manual workflow dispatch or a `v*` tag; creates an offline-capable debug APK.
+- The browser/PWA remains deployed through the existing GitHub Pages workflow.
 ## Legacy backend source
 
 The repository retains an earlier multilingual Kokoro FastAPI backend under `backend/` and its deployment workflow for reference. It is not connected to or shipped with the public GitHub Pages client. The current product UI and browser runtime are English-only.

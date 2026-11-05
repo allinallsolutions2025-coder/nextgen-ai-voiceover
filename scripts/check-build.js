@@ -24,7 +24,15 @@ const requiredFiles = [
   "tests/pronunciation.test.js",
   "tests/narration.test.js",
   "tests/paragraph-editor.test.js",
-  "package.json"
+  "package.json",
+  "vite.config.js",
+  "capacitor.config.json",
+  "electron/main.cjs",
+  "public/manifest.webmanifest",
+  "public/sw.js",
+  "public/icon.svg",
+  "scripts/download-model.js",
+  "scripts/copy-ort-assets.js"
 ];
 
 for (const file of requiredFiles) await access(new URL("../" + file, import.meta.url));
@@ -64,7 +72,8 @@ const requiredHtmlMarkers = [
   'id="benchmarkStatus"',
   'id="benchmarkResults"',
   'src="./src/main.js"',
-  'href="./src/styles.css"'
+  'href="./src/styles.css"',
+  'rel="manifest"'
 ];
 
 for (const marker of requiredHtmlMarkers) {
@@ -74,7 +83,7 @@ for (const marker of requiredHtmlMarkers) {
 }
 
 if (!main.includes("Kokoro-82M-v1.0-ONNX")) throw new Error("The browser runtime model ID is missing.");
-if (!main.includes("kokoro-js@1.2.1")) throw new Error("The Kokoro.js runtime is not pinned to the audited version.");
+if (!main.includes('const KOKORO_PACKAGE = "kokoro-js@1.2.1"') || !main.includes('import("kokoro-js")')) throw new Error("The Kokoro.js runtime must be pinned and bundled from npm.");
 if (!main.includes('device: "wasm"')) throw new Error("The baseline browser test must explicitly use WASM.");
 if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The speed control must support 0.50×–2.00×.");
 if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
@@ -105,7 +114,7 @@ if (!html.includes('value="american"') || !html.includes('value="british"') ||
     !html.includes('value="female"') || !html.includes('value="male"')) {
   throw new Error("Accent and gender voice filters are required.");
 }
-if (!main.includes("LAMEJS_CDN") || !main.includes("createMp3BlobFromSamples")) throw new Error("MP3 export support is missing.");
+if (!main.includes('import("lamejs")') || !main.includes('import("jszip")') || !main.includes("createMp3BlobFromSamples")) throw new Error("Bundled MP3 and ZIP export support is missing.");
 if (!html.includes('id="outputFormat"') || !html.includes('value="mp3"')) throw new Error("A user-selectable output format is required.");
 const backendApp = await readFile(new URL("../backend/app.py", import.meta.url), "utf8");
 const backendCatalog = await readFile(new URL("../backend/voice_catalog.py", import.meta.url), "utf8");
@@ -175,6 +184,31 @@ if (!main.includes("paragraph.voice || selectedVoice") ||
   throw new Error("Per-paragraph voice and speaking-pace overrides must apply to the section exports.");
 }
 
+
+
+const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
+const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+const capacitorConfig = JSON.parse(await readFile(new URL("../capacitor.config.json", import.meta.url), "utf8"));
+const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+if (pwaManifest.name !== "NextGen AI Voiceover" || pwaManifest.display !== "standalone" ||
+    !pwaManifest.icons?.length || !serviceWorker.includes("caches.open") ||
+    !serviceWorker.includes("huggingface.co")) {
+  throw new Error("Installable PWA metadata and offline runtime caching are required.");
+}
+if (capacitorConfig.webDir !== "dist" || !packageJson.dependencies?.["@capacitor/android"] ||
+    packageJson.dependencies?.["@capacitor/ios"]) {
+  throw new Error("Android packaging must be configured without adding iOS distribution.");
+}
+if (!main.includes("PACKAGED_RUNTIME") || !main.includes("allowRemoteModels = false") ||
+    !main.includes('localModelPath = new URL("../models/", import.meta.url).href') ||
+    !main.includes('new URL("../ort/", import.meta.url).href')) {
+  throw new Error("Packaged native apps must load the local Kokoro model and local ONNX Runtime WASM.");
+}
+if (!packageJson.scripts?.["build:offline"] || !packageJson.scripts?.["desktop:package"] ||
+    !packageJson.scripts?.["android:sync"] || !packageJson.build?.win ||
+    !packageJson.build?.mac || !packageJson.build?.linux) {
+  throw new Error("Cross-platform desktop and Android build scripts are incomplete.");
+}
 
 console.log("Static application validation passed.");
 console.log("English-only voice catalogue, pronunciation tools, speed presets, paragraph controls and full-script exports verified.");
