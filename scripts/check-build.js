@@ -32,7 +32,9 @@ const requiredFiles = [
   "public/sw.js",
   "public/icon.svg",
   "scripts/download-model.js",
-  "scripts/copy-ort-assets.js"
+  "scripts/copy-ort-assets.js",
+  "scripts/validate-offline-bundle.js",
+  "scripts/validate-apk.js"
 ];
 
 for (const file of requiredFiles) await access(new URL("../" + file, import.meta.url));
@@ -186,6 +188,13 @@ if (!main.includes("paragraph.voice || selectedVoice") ||
 
 
 
+const modelDownloader = await readFile(new URL("../scripts/download-model.js", import.meta.url), "utf8");
+const offlineValidator = await readFile(new URL("../scripts/validate-offline-bundle.js", import.meta.url), "utf8");
+if (!modelDownloader.includes("1939ad2a8e416c0acfeecc08a694d14ef25f2231") ||
+    !modelDownloader.includes("fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478") ||
+    !offlineValidator.includes("OFFLINE_BUNDLE_VALIDATION_PASSED")) {
+  throw new Error("Pinned Kokoro model revision and offline package verification are required.");
+}
 const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
 const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
 const capacitorConfig = JSON.parse(await readFile(new URL("../capacitor.config.json", import.meta.url), "utf8"));
