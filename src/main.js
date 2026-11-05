@@ -11,10 +11,12 @@ import {
   serializeParagraphs, splitParagraph
 } from "./lib/paragraph-editor.js";
 import { Capacitor } from "@capacitor/core";
+import { env as transformersEnv } from "@huggingface/transformers";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const KOKORO_PACKAGE = "kokoro-js@1.2.1";
-const PACKAGED_RUNTIME = location.protocol === "app:" || Capacitor.isNativePlatform();
+const OFFLINE_TEST = new URLSearchParams(location.search).has("offline-test");
+const PACKAGED_RUNTIME = location.protocol === "app:" || Capacitor.isNativePlatform() || OFFLINE_TEST;
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
 const DRAFT_STORAGE_KEY = "nextgen-voiceover-draft-v1";
@@ -26,6 +28,44 @@ const PREVIEW_TEXT = "Hello! This is a short preview of the selected voice.";
 const VOICE_PREVIEW_CACHE_VERSION = 1;
 const VOICE_PREVIEW_DB_NAME = "nextgen-voiceover-voice-previews-v1";
 const VOICE_PREVIEW_STORE_NAME = "voice-previews";
+
+function configureLocalKokoroAssets() {
+  if (!PACKAGED_RUNTIME) return;
+
+  // Transformers.js owns model/local-file settings. Kokoro.js's env export
+  // only proxies cacheDir and wasmPaths, so configure the real environment.
+  transformersEnv.allowLocalModels = true;
+  transformersEnv.localModelPath = new URL("../models/", import.meta.url).href;
+  transformersEnv.allowRemoteModels = false;
+  transformersEnv.useBrowserCache = true;
+  transformersEnv.backends.onnx.wasm.wasmPaths = new URL("../ort/", import.meta.url).href;
+
+  // Kokoro.js 1.2.1 hard-codes the voice file host. Redirect only its English
+  // voice requests to the corresponding bundled local .bin files.
+  const originalFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (input, init) => {
+    let requestUrl;
+    try {
+      const rawUrl = typeof input === "string" || input instanceof URL ? input : input.url;
+      requestUrl = new URL(rawUrl);
+    } catch {
+      return originalFetch(input, init);
+    }
+    const match = requestUrl.pathname.match(
+      /^\/onnx-community\/Kokoro-82M-v1\.0-ONNX\/resolve\/main\/voices\/((?:af|am|bf|bm)_[a-z]+\.bin)$/
+    );
+    if (!match || requestUrl.hostname !== "huggingface.co") {
+      return originalFetch(input, init);
+    }
+    const localVoiceUrl = new URL(
+      "../models/onnx-community/Kokoro-82M-v1.0-ONNX/voices/" + match[1],
+      import.meta.url
+    );
+    return originalFetch(localVoiceUrl, init);
+  };
+}
+
+configureLocalKokoroAssets();
 
 if (("https:" === location.protocol || location.hostname === "localhost") &&
     "serviceWorker" in navigator && !Capacitor.isNativePlatform()) {
@@ -575,19 +615,9 @@ async function getTTS() {
       const module = await import("kokoro-js");
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
       if (!module.TextSplitterStream) throw new Error("The selected Kokoro.js module does not expose TextSplitterStream.");
-      // Transformers.js caches model and WASM files through the browser Cache API by default.
-      // Keep both caches enabled explicitly when this Kokoro bundle exposes its env object.
-      if (module.env) {
-        module.env.useBrowserCache = true;
-        module.env.useWasmCache = true;
-        module.env.allowLocalModels = true;
-        module.env.localModelPath = new URL("../models/", import.meta.url).href;
-        // Kokoro.js exposes the supported override at env.wasmPaths.
-        // This keeps the ONNX Runtime .mjs loader and .wasm binary inside each platform package.
-        module.env.wasmPaths = new URL("../ort/", import.meta.url).href;
-        // Native builds ship the model and runtime with the installer. Never fall back to the network there.
-        if (PACKAGED_RUNTIME) module.env.allowRemoteModels = false;
-      }
+      // Configure the actual Transformers.js environment above. Kokoro.js
+      // exposes only a WASM-path proxy in its own env export.
+      if (module.env) module.env.wasmPaths = new URL("../ort/", import.meta.url).href;
       state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
