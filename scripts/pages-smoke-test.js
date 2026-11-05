@@ -127,6 +127,18 @@ try {
   assert.equal(desktopLayout.horizontalOverflow, false, "Studio should not overflow horizontally at a Windows desktop size.");
   assert.equal(desktopLayout.sideBySide, true, "Editor and settings should fit side by side on a desktop.");
   assert.ok(desktopLayout.editorWidth >= 650, "The script editor should have adequate desktop width.");
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const wideLayout = await page.evaluate(() => ({
+    width: window.innerWidth,
+    horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+    sideBySide: document.querySelector(".settings-column").getBoundingClientRect().left >
+      document.querySelector(".editor-column").getBoundingClientRect().left
+  }));
+  report.desktopLayout1920x1080 = wideLayout;
+  assert.equal(wideLayout.width, 1920);
+  assert.equal(wideLayout.horizontalOverflow, false);
+  assert.equal(wideLayout.sideBySide, true);
+  await page.setViewportSize({ width: 1366, height: 768 });
   report.checks.windowsDesktopLayoutFits = true;
   report.checks.diagnosticsRemoved =
     await page.locator("#metricsHeading, #modelLoadMetric, #synthesisMetric, #totalMetric").count() === 0;
