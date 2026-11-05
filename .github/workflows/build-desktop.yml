@@ -3,8 +3,18 @@ name: Build desktop installers
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - "v*"
+    paths:
+      - ".github/workflows/build-desktop.yml"
+      - "package.json"
+      - "vite.config.js"
+      - "src/**"
+      - "scripts/download-model.js"
+      - "scripts/copy-ort-assets.js"
+      - "scripts/generate-pwa-icons.js"
+      - "electron/**"
 
 permissions:
   contents: read
