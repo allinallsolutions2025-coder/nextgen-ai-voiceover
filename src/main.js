@@ -12,8 +12,11 @@ import {
 } from "./lib/paragraph-editor.js";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+const KOKORO_LOCAL = new URL("../vendor/kokoro.web.js", import.meta.url).href;
 const KOKORO_CDN = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
-const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+const JSZIP_LOCAL = new URL("../vendor/jszip.min.js", import.meta.url).href;
+const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+const LAMEJS_LOCAL = new URL("../vendor/lame.min.js", import.meta.url).href;
 const LAMEJS_CDN = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
 const MAX_CHARACTERS = 20000;
 const MAX_PARAGRAPHS = 100;
@@ -564,7 +567,13 @@ async function getTTS() {
     state.ttsPromise = (async () => {
       setBadge("Loading model", "loading");
       setStatus("Restoring the voice model from this browser’s saved cache. The first visit downloads it; later visits reuse the cached model files.");
-      const module = await import(KOKORO_CDN);
+      let module;
+      try {
+        module = await import(KOKORO_LOCAL);
+      } catch (localRuntimeError) {
+        console.warn("Bundled Kokoro runtime was unavailable; using the pinned CDN copy.", localRuntimeError);
+        module = await import(KOKORO_CDN);
+      }
       if (!module.KokoroTTS) throw new Error("KokoroTTS was not exported by the selected Kokoro.js module.");
       if (!module.TextSplitterStream) throw new Error("The selected Kokoro.js module does not expose TextSplitterStream.");
       // Transformers.js caches model and WASM files through the browser Cache API by default.
@@ -572,6 +581,14 @@ async function getTTS() {
       if (module.env) {
         module.env.useBrowserCache = true;
         module.env.useWasmCache = true;
+        // Release builds include the model in dist/models/. The public web build
+        // leaves that directory empty and transparently falls back to Hugging Face.
+        module.env.allowLocalModels = true;
+        module.env.allowRemoteModels = true;
+        module.env.localModelPath = new URL("../models/", import.meta.url).href;
+        if (module.env.backends?.onnx?.wasm) {
+          module.env.backends.onnx.wasm.wasmPaths = new URL("../vendor/transformers/", import.meta.url).href;
+        }
       }
       state.TextSplitterStream = module.TextSplitterStream;
       return module.KokoroTTS.from_pretrained(MODEL_ID, {
@@ -595,13 +612,25 @@ async function getLameJS() {
   if (!state.lamePromise) {
     state.lamePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = LAMEJS_CDN;
+      const sources = [LAMEJS_LOCAL, LAMEJS_CDN];
+      let sourceIndex = 0;
+      const loadSource = () => {
+        script.src = sources[sourceIndex];
+        document.head.append(script);
+      };
       script.async = true;
       script.onload = () => window.lamejs?.Mp3Encoder
         ? resolve(window.lamejs)
         : reject(new Error("The MP3 encoder loaded without exposing lamejs.Mp3Encoder."));
-      script.onerror = () => reject(new Error("Could not load the browser MP3 encoder. Check your connection and retry."));
-      document.head.append(script);
+      script.onerror = () => {
+        if (sourceIndex + 1 < sources.length) {
+          sourceIndex += 1;
+          loadSource();
+        } else {
+          reject(new Error("Could not load the browser MP3 encoder. Check your connection and retry."));
+        }
+      };
+      loadSource();
     }).catch((error) => {
       state.lamePromise = null;
       throw error;
@@ -612,12 +641,31 @@ async function getLameJS() {
 
 async function getJSZip() {
   if (!state.jsZipPromise) {
-    state.jsZipPromise = import(JSZIP_CDN)
-      .then((module) => module.default || module)
-      .catch((error) => {
-        state.jsZipPromise = null;
-        throw error;
-      });
+    state.jsZipPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      const sources = [JSZIP_LOCAL, JSZIP_CDN];
+      let sourceIndex = 0;
+      const loadSource = () => {
+        script.src = sources[sourceIndex];
+        document.head.append(script);
+      };
+      script.async = true;
+      script.onload = () => window.JSZip
+        ? resolve(window.JSZip)
+        : reject(new Error("The ZIP library loaded without exposing JSZip."));
+      script.onerror = () => {
+        if (sourceIndex + 1 < sources.length) {
+          sourceIndex += 1;
+          loadSource();
+        } else {
+          reject(new Error("Could not load the project ZIP library. Check your connection and retry."));
+        }
+      };
+      loadSource();
+    }).catch((error) => {
+      state.jsZipPromise = null;
+      throw error;
+    });
   }
   return state.jsZipPromise;
 }
