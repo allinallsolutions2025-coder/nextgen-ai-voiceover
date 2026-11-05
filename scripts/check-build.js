@@ -196,6 +196,7 @@ if (!modelDownloader.includes("1939ad2a8e416c0acfeecc08a694d14ef25f2231") ||
     !offlineValidator.includes("OFFLINE_BUNDLE_VALIDATION_PASSED")) {
   throw new Error("Pinned Kokoro model revision and offline package verification are required.");
 }
+const offlineSmoke = await readFile(new URL("../scripts/offline-smoke-test.js", import.meta.url), "utf8");
 const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
 const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
 const capacitorConfig = JSON.parse(await readFile(new URL("../capacitor.config.json", import.meta.url), "utf8"));
@@ -206,6 +207,14 @@ if (pwaManifest.name !== "NextGen AI Voiceover" || pwaManifest.display !== "stan
   throw new Error("Installable PWA metadata and offline runtime caching are required.");
 }
 const buildDependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+if (!buildDependencies["@huggingface/transformers"] ||
+    !main.includes('import { env as transformersEnv } from "@huggingface/transformers";') ||
+    !main.includes("transformersEnv.allowLocalModels = true") ||
+    !main.includes("transformersEnv.allowRemoteModels = false") ||
+    !main.includes("localVoiceUrl") || !main.includes("offline-test") ||
+    !offlineSmoke.includes("OFFLINE_KOKORO_END_TO_END_TEST_PASSED")) {
+  throw new Error("Native offline mode must configure Transformers.js and load bundled Kokoro voices locally.");
+}
 if (capacitorConfig.webDir !== "dist" || !buildDependencies["@capacitor/android"] ||
     buildDependencies["@capacitor/ios"]) {
   throw new Error("Android packaging must be configured without adding iOS distribution.");
