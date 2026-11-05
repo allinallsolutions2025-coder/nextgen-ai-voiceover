@@ -89,7 +89,7 @@ if (!main.includes("Kokoro-82M-v1.0-ONNX")) throw new Error("The browser runtime
 if (!main.includes('const KOKORO_PACKAGE = "kokoro-js@1.2.1"') || !main.includes('import("kokoro-js")')) throw new Error("The Kokoro.js runtime must be pinned and bundled from npm.");
 if (!main.includes('device: "wasm"')) throw new Error("The baseline browser test must explicitly use WASM.");
 if (!html.includes('min="0.50" max="2.00" step="0.05"')) throw new Error("The speed control must support 0.50×–2.00×.");
-if (!main.includes("useBrowserCache = true") || !main.includes("useWasmCache = true")) throw new Error("Persistent browser model and WASM caching must remain enabled.");
+if (!main.includes("transformersEnv.useBrowserCache = true") || !main.includes("transformersEnv.backends.onnx.wasm.wasmPaths")) throw new Error("Persistent model caching and a local ONNX Runtime WASM path must remain enabled.");
 if (!main.includes("saveDraftLocally") || !main.includes("restoreDraftLocally") || !main.includes("nextgen-voiceover-draft-v1")) throw new Error("Local script draft save and recovery are required.");
 if (!main.includes("previewSelectedVoice") || !main.includes("PREVIEW_TEXT")) throw new Error("Selected voice audition is required.");
 if (!main.includes("applyPronunciationRules") || !main.includes("parsePronunciationRules") ||
