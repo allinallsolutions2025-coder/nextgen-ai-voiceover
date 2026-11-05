@@ -2,6 +2,15 @@ import { access, readFile } from "node:fs/promises";
 
 const requiredFiles = [
   "index.html",
+  "public/manifest.webmanifest",
+  "public/sw.js",
+  "public/icon.svg",
+  "src/pwa.js",
+  "scripts/check-platform-build.js",
+  "electron/main.cjs",
+  "electron-builder.yml",
+  "capacitor.config.json",
+  "tests/platform-packaging.test.js",
   "src/main.js",
   "src/styles.css",
   "src/lib/text.js",
@@ -64,6 +73,8 @@ const requiredHtmlMarkers = [
   'id="benchmarkStatus"',
   'id="benchmarkResults"',
   'src="./src/main.js"',
+  'src="./src/pwa.js"',
+  'href="./manifest.webmanifest"',
   'href="./src/styles.css"'
 ];
 
