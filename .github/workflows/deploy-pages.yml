@@ -13,6 +13,7 @@ on:
       - "scripts/build-site.js"
       - "scripts/check-build.js"
       - "scripts/copy-ort-assets.js"
+      - "scripts/generate-pwa-icons.js"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
