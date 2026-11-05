@@ -11,7 +11,7 @@ on:
       - "capacitor.config.json"
       - "package.json"
       - "package-lock.json"
-      - "scripts/build-site.js"
+      - "scripts/**"
       - ".github/workflows/build-android.yml"
 
 permissions:
