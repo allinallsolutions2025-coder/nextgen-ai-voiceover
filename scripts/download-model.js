@@ -1,4 +1,5 @@
-import { createWriteStream } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,8 +8,10 @@ import { Readable } from "node:stream";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const modelId = "onnx-community/Kokoro-82M-v1.0-ONNX";
+const modelRevision = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
+const modelSha256 = "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478";
 const modelRoot = resolve(root, "public/models", modelId);
-const apiUrl = `https://huggingface.co/api/models/${modelId}`;
+const apiUrl = `https://huggingface.co/${modelId}`;
 
 const englishVoices = [
   "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica",
@@ -27,6 +30,12 @@ const files = [
   ...englishVoices.map(voice => `voices/${voice}.bin`)
 ];
 
+async function sha256File(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
 async function downloadFile(revision, relativePath) {
   const encodedPath = relativePath.split("/").map(encodeURIComponent).join("/");
   const url = `https://huggingface.co/${modelId}/resolve/${revision}/${encodedPath}`;
@@ -38,8 +47,13 @@ async function downloadFile(revision, relativePath) {
     try {
       const existing = await stat(destination);
       if (existing.size > 0) {
-        console.log(`Already bundled: ${relativePath} (${existing.size.toLocaleString()} bytes)`);
-        return existing.size;
+        const digest = relativePath === "onnx/model_quantized.onnx" ? await sha256File(destination) : null;
+        if (relativePath !== "onnx/model_quantized.onnx" || digest === modelSha256) {
+          console.log(`Already bundled: ${relativePath} (${existing.size.toLocaleString()} bytes)`);
+          return existing.size;
+        }
+        console.warn("Existing ONNX model failed SHA-256 validation; downloading the pinned file again.");
+        await rm(destination, { force: true });
       }
     } catch { /* Download the missing file. */ }
   }
@@ -60,6 +74,12 @@ async function downloadFile(revision, relativePath) {
     if (relativePath.startsWith("voices/") && downloaded.size < 1000) {
       throw new Error(`Voice pack is unexpectedly small: ${relativePath}`);
     }
+    if (relativePath === "onnx/model_quantized.onnx") {
+      const digest = await sha256File(temporary);
+      if (digest !== modelSha256) {
+        throw new Error(`Pinned ONNX SHA-256 mismatch. Expected ${modelSha256}, received ${digest}.`);
+      }
+    }
     await rename(temporary, destination);
     return downloaded.size;
   } catch (error) {
@@ -68,10 +88,7 @@ async function downloadFile(revision, relativePath) {
   }
 }
 
-const metadataResponse = await fetch(apiUrl, { redirect: "follow" });
-if (!metadataResponse.ok) throw new Error(`Could not read Hugging Face model metadata: HTTP ${metadataResponse.status}`);
-const metadata = await metadataResponse.json();
-const revision = process.env.KOKORO_MODEL_REVISION || metadata.sha || "main";
+const revision = modelRevision;
 const markerPath = resolve(modelRoot, ".revision");
 
 let previousRevision = "";
@@ -89,6 +106,7 @@ const manifest = {
   revision,
   dtype: "q8",
   onnxFile: "onnx/model_quantized.onnx",
+  onnxSha256: modelSha256,
   voices: englishVoices,
   files,
   totalBytes,
