@@ -6,10 +6,13 @@ const capacitor = JSON.parse(await readFile(new URL("../capacitor.config.json", 
 const manifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
 const electronBuilder = await readFile(new URL("../electron-builder.yml", import.meta.url), "utf8");
 const electronMain = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+const modelDownloader = await readFile(new URL("../scripts/download-model-assets.js", import.meta.url), "utf8");
+const mainScript = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
 const worker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
 const pwaEntry = await readFile(new URL("../src/pwa.js", import.meta.url), "utf8");
 
 if (pkg.main !== "electron/main.cjs") throw new Error("Electron main entry is not configured.");
+if (!pkg.scripts["build:release"] || !pkg.scripts["dist:desktop"].includes("build:release")) throw new Error("Native installers must use the model-inclusive release build.");
 for (const dependency of ["electron", "electron-builder", "@capacitor/core", "@capacitor/cli", "@capacitor/android"]) {
   if (!pkg.dependencies?.[dependency] && !pkg.devDependencies?.[dependency]) {
     throw new Error("Missing cross-platform package dependency: " + dependency);
@@ -26,6 +29,8 @@ for (const marker of ["nsis", "dmg", "AppImage"]) {
 for (const marker of ["contextIsolation: true", "nodeIntegration: false", "sandbox: true", "127.0.0.1"]) {
   if (!electronMain.includes(marker)) throw new Error("Desktop renderer security requirement missing: " + marker);
 }
+if (!modelDownloader.includes("onnx/model_quantized.onnx") || !modelDownloader.includes("ENGLISH_VOICES") || !modelDownloader.includes("tokenizer.json")) throw new Error("The native release build must include the quantized model, tokenizer and all English voice packs.");
+if (!mainScript.includes("KOKORO_LOCAL") || !mainScript.includes("localModelPath") || !mainScript.includes("allowLocalModels = true")) throw new Error("The app must prefer packaged local model/runtime assets.");
 if (!worker.includes("event.respondWith") || !worker.includes("APP_FILES")) {
   throw new Error("The PWA service worker does not cache the app shell.");
 }
