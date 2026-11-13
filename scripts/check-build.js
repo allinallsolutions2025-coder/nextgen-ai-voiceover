@@ -79,6 +79,10 @@ const requiredHtmlMarkers = [
   'rel="manifest"'
 ];
 
+if (!/(?:^|\r?\n)\s*<link\s+rel=["']manifest["']/.test(html)) {
+  throw new Error("The PWA manifest link must be a real standalone HTML head element.");
+}
+
 for (const marker of requiredHtmlMarkers) {
   // Generated audio elements are created at runtime, so their IDs are checked in the script.
   if (marker === 'id="fullScriptAudio"' || marker === 'id="fullScriptDownload"') continue;
