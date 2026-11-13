@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { getCompleteVoiceCatalog } from "../src/lib/voice-catalog.js";
 import { validateVoicePreviewManifest, verifyVoicePreviewBlob } from "../src/lib/voice-previews.js";
 
 const expected = {
@@ -85,4 +87,23 @@ test("verifies WAV framing, exact byte count and SHA-256 content", async () => {
 test("fails safely when Web Crypto is unavailable", async () => {
   const entry = manifestFor().previews[0];
   await assert.rejects(verifyVoicePreviewBlob(entry, new Blob([wavBytes()]), null), /secure browser context/);
+});
+
+test("all 28 committed preview WAVs match the production manifest", async () => {
+  const previewRoot = new URL("../public/voice-previews/", import.meta.url);
+  const manifest = JSON.parse(await readFile(new URL("manifest.json", previewRoot), "utf8"));
+  const entries = validateVoicePreviewManifest(manifest, {
+    modelId: "onnx-community/Kokoro-82M-v1.0-ONNX",
+    modelRevision: "1939ad2a8e416c0acfeecc08a694d14ef25f2231",
+    previewVersion: 2,
+    voiceIds: getCompleteVoiceCatalog().map(voice => voice.id)
+  });
+  assert.equal(entries.length, 28);
+  for (const entry of entries) {
+    const bytes = await readFile(new URL(entry.file, previewRoot));
+    assert.equal(bytes.byteLength, entry.bytes, entry.id + " byte count");
+    assert.equal(bytes.subarray(0, 4).toString("ascii"), "RIFF", entry.id + " RIFF header");
+    assert.equal(bytes.subarray(8, 12).toString("ascii"), "WAVE", entry.id + " WAVE header");
+    await verifyVoicePreviewBlob(entry, new Blob([bytes]));
+  }
 });
