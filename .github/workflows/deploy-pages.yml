@@ -53,12 +53,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/voice-previews/
+          git add public/voice-previews/ package-lock.json
           if ! git diff --cached --quiet; then
-            git commit -m "chore: add pre-generated English voice previews"
+            git commit -m "chore: sync English voice previews and npm lockfile"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           else
-            echo "Voice preview library is already committed."
+            echo "Generated assets and npm lockfile are already committed."
           fi
 
       - name: Check JavaScript syntax
