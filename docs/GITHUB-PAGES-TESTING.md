@@ -1,67 +1,56 @@
-# GitHub Pages testing
+# GitHub Pages deployment and testing
 
-## Purpose
+## Current deployment model
 
-Use a stable HTTPS preview for browser testing instead of a running Codespaces port-forward. The source repository remains the private development source of truth.
+The repository's live browser app is published from the `main` branch by the **Deploy preview to GitHub Pages** workflow.
 
-## Important visibility and plan rules
+The workflow runs on pushes to `main` that change the app, public assets, Vite configuration, package manifests, relevant build scripts, or the deployment workflow itself. It can also be started manually with `workflow_dispatch`.
 
-- GitHub Pages on GitHub Free requires the source repository to be public.
-- GitHub Pages can be enabled for a private repository on GitHub Pro, Team or Enterprise plans.
-- A GitHub Pages site published from a private repository is still publicly accessible on the internet by default, unless the organization is on GitHub Enterprise Cloud and configures private site access control.
-- Do not publish secrets, private user content, development notes, or internal documentation in the Pages artifact.
-
-This project publishes only the static application build from `dist/`. The workflow deliberately excludes the repository's docs, GitHub workflows, tests and development scripts. Browser-side JavaScript is inherently visible to visitors; never put secrets or private credentials in it.
-
-## Enable Pages once
-
-1. Open the repository's **Settings**.
-2. Open **Pages** under **Code and automation**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Save the setting if GitHub asks.
-
-If GitHub reports that Pages is unavailable for this private repository, the account plan does not permit private-repository Pages. Do not change the repository to public without the owner's explicit decision. Options are:
-- Upgrade the account to GitHub Pro while keeping the source repository private (the Pages site itself will still be public by default).
-- Use a separate public preview repository containing only the frontend application files (the preview site is public).
-- Keep the repository private and use a static host that supports private GitHub repositories.
-
-## First deployment
-
-The deployment workflow is manual initially so the site is not published until Pages settings and visibility have been reviewed.
-
-1. Open the repository's **Actions** tab.
-2. Select **Deploy preview to GitHub Pages**.
-3. Select **Run workflow** on branch `main`.
-4. Wait for the build and deployment jobs to complete.
-5. Open the URL shown in the deployment job's environment.
-
-Expected project URL when using the standard public project-site domain:
+Expected project-site URL:
 
 `https://allinallsolutions2025-coder.github.io/nextgen-ai-voiceover/`
 
-The actual URL shown by GitHub's deployment output is authoritative.
+GitHub's deployment environment URL is authoritative if the Pages site is ever moved.
 
-## Subsequent updates
+## Enable Pages
 
-After the first successful deployment, the workflow can be changed to deploy automatically on pushes to `main`, or remain manual during development. The CI workflow already runs independently on every push and pull request.
+For a new repository setup:
 
-## Build contents
+1. Open repository **Settings**.
+2. Open **Pages** under **Code and automation**.
+3. Set **Build and deployment → Source** to **GitHub Actions**.
+4. Save the setting if GitHub asks.
 
-The build script creates `dist/` containing only:
-- `index.html`
-- `src/main.js`
-- `src/lib/text.js`
-- `src/styles.css`
-- `.nojekyll`
+The repository is public. The published Pages site is also publicly accessible; do not put credentials, private scripts, private customer information, or generated user audio in the published files. Browser-side JavaScript and assets are visible to visitors.
 
-The Kokoro model and JS runtime are still loaded from their configured external repositories/CDN at runtime. The first model load can therefore take longer than a subsequent load, depending on browser cache and network conditions.
+## What is published
 
-## Testing on Pages
+The deployment workflow builds the Vite app and publishes only `dist/`. The published output contains the static application shell and bundled JavaScript/CSS, PWA manifest and icons, service worker, ONNX Runtime WebAssembly assets, and the pre-generated English voice preview library.
 
-Use the same browser-runtime plan:
-- Capture cold model load in a fresh browser profile / cleared site data.
-- Capture warm reload without clearing storage.
-- Record actual ONNX model and voice asset requests in DevTools Network.
-- Record model-load, synthesis and total-generation timings from the UI.
-- Verify individual WAV and ZIP downloads.
-- Test Chrome first, then another browser/device.
+The large Kokoro q8 ONNX model and its 28 English voice packs are **not** shipped in the GitHub Pages artifact. The browser downloads the pinned model assets on first use from the configured model distribution source, then uses the browser model cache and service-worker runtime cache where available. Native offline packages use a separate build path that bundles those model assets.
+
+Repository documentation, tests, workflows, backend source and development scripts are not part of the Pages artifact.
+
+## Automated checks
+
+The repository has separate workflows for:
+
+- **CI** — Node 24 syntax checks, unit tests, static build, legacy backend source checks, and deployment-output validation.
+- **Deploy preview to GitHub Pages** — pre-generates the 28 English voice preview WAVs if needed, runs checks/build, and publishes `dist/`.
+- **Test live GitHub Pages app** — runs the Playwright Chromium smoke test against the published URL after a successful Pages deployment. It tests model loading, synthesis, audio exports, ZIP contents, voice filters, voice preview caching and reload recovery.
+- **Verify offline Kokoro voice generation** — packages the pinned q8 model and ONNX Runtime WebAssembly assets, then tests generation with external network requests blocked.
+
+A successful static build does not by itself prove that live model downloads, browser synthesis or preview-cache restoration work. Review the live-site and offline test run results separately.
+
+## Manual browser verification
+
+For additional device/browser checks:
+
+1. Open the published app in a fresh browser profile to observe first-load model downloads.
+2. Generate a short test script with at least one American and one British voice.
+3. Generate a multi-paragraph script and check the section files and continuous full-script audio.
+4. Download and open the WAV or MP3, SRT, VTT and project ZIP outputs.
+5. Reload the page and check that the draft, saved preferences and pre-generated voice previews are restored.
+6. Repeat in another browser/device and record any platform-specific issues.
+
+The browser model cache can be evicted by the browser, so offline reuse is best-effort in the web app. The native desktop and Android build workflows verify the separately bundled model path.

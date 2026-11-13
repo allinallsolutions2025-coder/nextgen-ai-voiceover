@@ -36,7 +36,7 @@ jobs:
           node-version: 24
 
       - name: Install Playwright
-        run: npm install --no-save --package-lock=false playwright
+        run: npm install --no-save --package-lock=false playwright@1.65.0
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
