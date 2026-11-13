@@ -6,6 +6,7 @@ const requiredFiles = [
   "src/styles.css",
   "src/lib/text.js",
   "src/lib/voice-catalog.js",
+  "src/lib/voice-previews.js",
   "src/lib/pronunciation.js",
   "src/lib/narration.js",
   "src/lib/paragraph-editor.js",
@@ -19,8 +20,11 @@ const requiredFiles = [
   "backend/Dockerfile",
   "backend/requirements.txt",
   "backend/test_voice_catalog.py",
+  "backend/api_security.py",
+  "backend/test_api_security.py",
   "backend/README.md",
   "tests/voice-catalog.test.js",
+  "tests/voice-previews.test.js",
   "tests/pronunciation.test.js",
   "tests/narration.test.js",
   "tests/paragraph-editor.test.js",
@@ -89,6 +93,14 @@ for (const marker of requiredHtmlMarkers) {
   if (!html.includes(marker)) throw new Error("Missing required HTML marker: " + marker);
 }
 
+if (!main.includes("validateVoicePreviewManifest") || !main.includes("verifyVoicePreviewBlob")) {
+  throw new Error("Bundled English voice previews must be validated and checksum-verified before playback.");
+}
+const previewIntegrity = await readFile(new URL("../src/lib/voice-previews.js", import.meta.url), "utf8");
+if (!previewIntegrity.includes('subtle.digest("SHA-256"') || !previewIntegrity.includes('ascii(header.slice(0, 4)) !== "RIFF"')) {
+  throw new Error("Voice preview WAV framing and SHA-256 integrity checks are required.");
+}
+
 if (!main.includes("Kokoro-82M-v1.0-ONNX")) throw new Error("The browser runtime model ID is missing.");
 if (!main.includes('const KOKORO_PACKAGE = "kokoro-js@1.2.1"') || !main.includes('import("kokoro-js")')) throw new Error("The Kokoro.js runtime must be pinned and bundled from npm.");
 if (!main.includes('device: "wasm"')) throw new Error("The baseline browser test must explicitly use WASM.");
@@ -125,6 +137,12 @@ if (!main.includes('import("@breezystack/lamejs")') || !main.includes('import("j
 if (!html.includes('id="outputFormat"') || !html.includes('value="mp3"')) throw new Error("A user-selectable output format is required.");
 const backendApp = await readFile(new URL("../backend/app.py", import.meta.url), "utf8");
 const backendCatalog = await readFile(new URL("../backend/voice_catalog.py", import.meta.url), "utf8");
+const backendSecurity = await readFile(new URL("../backend/api_security.py", import.meta.url), "utf8");
+if (!backendApp.includes("matches_configured_api_key") ||
+    !backendApp.includes("API access is disabled until the NEXTGEN_API_KEY secret is configured") ||
+    !backendSecurity.includes("hmac.compare_digest")) {
+  throw new Error("The legacy API must fail closed when its API key is not configured.");
+}
 if (!backendApp.includes("KPipeline(lang_code=code") || !backendApp.includes("KModel(repo_id=MODEL_REPO_ID)")) throw new Error("The server must use the Kokoro Python multilingual pipeline.");
 if (!backendApp.includes('"/v1/audio/speech"') || !backendApp.includes('"/v1/voices"') || !backendApp.includes("LANGUAGE_TEST_TEXT")) throw new Error("The multilingual API endpoints and per-language checks are required.");
 if (!backendCatalog.includes('"zf_xiaoyi"') || !backendCatalog.includes('"ff_siwis"') || !backendCatalog.includes('"hm_psi"')) throw new Error("The 54-voice server catalogue is incomplete.");
