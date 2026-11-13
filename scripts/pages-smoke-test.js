@@ -42,6 +42,8 @@ async function waitForGeneration(page) {
     return status.startsWith("Preparing the MP3 encoder") ||
       status.startsWith("Generating paragraph") ||
       status.startsWith("Generating one continuous voiceover") ||
+      status.startsWith("English voiceover complete.") ||
+      status.startsWith("Voiceover complete.") ||
       status.startsWith("Generation failed:");
   }, null, { timeout: 120000 });
   await page.waitForFunction(() => {
