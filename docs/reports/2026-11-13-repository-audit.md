@@ -28,7 +28,7 @@ The follow-up review added these changes on a branch based on the latest `main`:
 - **Legacy API security:** the separate FastAPI backend now rejects requests with HTTP 503 when `NEXTGEN_API_KEY` is not configured and compares supplied keys with `hmac.compare_digest`. The backend README now documents the required Hugging Face Space secret. The helper has tests for missing, wrong, matching and non-ASCII keys.
 - **CI wiring:** include the new JavaScript module in syntax checks and build guards, include the new Python helper in byte-compilation checks, and run the additional JavaScript/Python unit tests through the existing test suites.
 
-These follow-up changes are not yet counted as verified by CI or a live deployed test until the new pull request's checks complete.
+The follow-up PR #12 head commit `b9b917ce89e22ffc5cd84dcaacc3cedd581c1f47` passed GitHub Actions CI run [#167](https://github.com/allinallsolutions2025-coder/nextgen-ai-voiceover/actions/runs/43447546181). The run completed syntax checks, all **65 Node.js tests** (including checksum/size/WAV-header validation of all 28 committed production WAV previews), the static Vite build and deployment-output checks, Python byte-compilation and all **8 Python tests**. The new checksum validation code has not yet been exercised by the deployed live-site Chromium workflow; that still needs to run after PR #12 is merged and Pages is redeployed.
 
 ## Existing test and release evidence reviewed
 
@@ -61,4 +61,4 @@ The live Pages and offline synthesis browser workflows are separate from CI. Pos
 
 ## Pull request
 
-The PWA/lockfile audit is merged through [PR #10](https://github.com/allinallsolutions2025-coder/nextgen-ai-voiceover/pull/10) and [PR #11](https://github.com/allinallsolutions2025-coder/nextgen-ai-voiceover/pull/11). The extended integrity/security changes are tracked separately in the follow-up PR.
+The PWA/lockfile audit is merged through [PR #10](https://github.com/allinallsolutions2025-coder/nextgen-ai-voiceover/pull/10) and [PR #11](https://github.com/allinallsolutions2025-coder/nextgen-ai-voiceover/pull/11). The extended integrity/security changes, with CI passing, are tracked separately in [PR #12](https://github.com/allinallsolutions2025-coder/nextgen-ai-voiceover/pull/12).
