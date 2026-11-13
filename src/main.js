@@ -1328,7 +1328,13 @@ async function loadStaticVoicePreviewLibrary() {
         setPreviewReady(voice, blob, saved, true);
         return true;
       } catch (error) {
-        setPreviewError(voice, error);
+        const card = previewCard(voice.id);
+        if (card) {
+          card.classList.add("benchmark-card-error");
+          card.querySelector(".benchmark-card-state").textContent =
+            "Bundled preview could not be verified: " + (error?.message || String(error));
+        }
+        // Keep the voice eligible for automatic model-based preview regeneration.
         throw error;
       }
     }));
