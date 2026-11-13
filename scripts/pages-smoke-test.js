@@ -560,7 +560,7 @@ try {
     document.querySelectorAll("#benchmarkResults .benchmark-card-ready").length === 28,
   null, { timeout: 8 * 60 * 1000 });
   const previewCache = await page.evaluate(() => new Promise(resolve => {
-    const request = indexedDB.open("nextgen-voiceover-voice-previews-v1", 1);
+    const request = indexedDB.open("nextgen-voiceover-voice-previews-v1");
     request.onerror = () => resolve({ count: 0, error: "IndexedDB unavailable" });
     request.onsuccess = () => {
       const database = request.result;
@@ -575,7 +575,7 @@ try {
         const records = read.result || [];
         database.close();
         resolve({ count: records.filter(record =>
-          record.sampleVersion === 1 && record.blob instanceof Blob
+          record.sampleVersion === database.version && record.blob instanceof Blob
         ).length });
       };
       read.onerror = () => {
