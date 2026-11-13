@@ -42,7 +42,7 @@ jobs:
 
       - name: Install Playwright Chromium
         run: |
-          npm install --no-save --package-lock=false playwright
+          npm install --no-save --package-lock=false playwright@1.65.0
           npx playwright install --with-deps chromium
 
       - name: Download and validate pinned offline model
