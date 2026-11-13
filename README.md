@@ -43,7 +43,7 @@ Speech synthesis runs locally in the browser. Your script and pronunciation repl
 
 ## Run locally
 
-Use Node.js 24 or later. Use `npm install` because this cross-platform build adds native and bundling dependencies:
+Use Node.js 24 or later. Install the exact dependency tree recorded in `package-lock.json` with:
 
 ```bash
 npm install
