@@ -2,6 +2,7 @@
 import { getSpeechChunks, validateParagraphInput } from "./lib/text.js";
 import { applyPronunciationRules, parsePronunciationRules } from "./lib/pronunciation.js";
 import { getCompleteVoiceCatalog, normalizeVoiceCatalog } from "./lib/voice-catalog.js";
+import { validateVoicePreviewManifest, verifyVoicePreviewBlob } from "./lib/voice-previews.js";
 import { prepareNarrationText, splitNarrationSections } from "./lib/narration.js";
 import { processAudioSamples } from "./lib/audio-processing.js";
 import { getAudioDurationSeconds } from "./lib/audio-metadata.js";
@@ -1307,26 +1308,35 @@ async function loadStaticVoicePreviewLibrary() {
       return 0;
     }
     const manifest = await manifestResponse.json();
-    if (manifest.modelId !== MODEL_ID ||
-        manifest.modelRevision !== MODEL_REVISION ||
-        manifest.previewVersion !== VOICE_PREVIEW_CACHE_VERSION ||
-        !Array.isArray(manifest.previews)) {
-      throw new Error("The saved voice preview library does not match this app version.");
-    }
+    const previewEntries = validateVoicePreviewManifest(manifest, {
+      modelId: MODEL_ID,
+      modelRevision: MODEL_REVISION,
+      previewVersion: VOICE_PREVIEW_CACHE_VERSION,
+      voiceIds: [...state.supportedVoiceIds]
+    });
 
     const db = await getVoicePreviewDatabase();
-    const results = await Promise.allSettled(manifest.previews.map(async (entry) => {
-      if (!entry || !state.supportedVoiceIds.has(entry.id) ||
-          !/^[ab][fm]_[a-z0-9_]+\.wav$/.test(String(entry.file || ""))) return false;
+    const results = await Promise.allSettled(previewEntries.map(async (entry) => {
       const voice = state.voiceCatalog.find(item => item.id === entry.id);
-      if (!voice) return false;
-      const response = await fetch(new URL(entry.file, manifestUrl), { cache: "force-cache" });
-      if (!response.ok) throw new Error("Could not load preview " + entry.id + " (HTTP " + response.status + ").");
-      const blob = await response.blob();
-      if (blob.size < 44) throw new Error("Preview " + entry.id + " is empty or incomplete.");
-      const saved = await saveVoicePreviewCache(entry.id, blob, db);
-      setPreviewReady(voice, blob, saved, true);
-      return true;
+      if (!voice) throw new Error("The voice catalogue is missing " + entry.id + ".");
+      try {
+        const response = await fetch(new URL(entry.file, manifestUrl), { cache: "force-cache" });
+        if (!response.ok) throw new Error("Could not load preview " + entry.id + " (HTTP " + response.status + ").");
+        const blob = await response.blob();
+        await verifyVoicePreviewBlob(entry, blob);
+        const saved = await saveVoicePreviewCache(entry.id, blob, db);
+        setPreviewReady(voice, blob, saved, true);
+        return true;
+      } catch (error) {
+        const card = previewCard(voice.id);
+        if (card) {
+          card.classList.add("benchmark-card-error");
+          card.querySelector(".benchmark-card-state").textContent =
+            "Bundled preview could not be verified: " + (error?.message || String(error));
+        }
+        // Keep the voice eligible for automatic model-based preview regeneration.
+        throw error;
+      }
     }));
 
     const loaded = results.filter(result => result.status === "fulfilled" && result.value).length;
