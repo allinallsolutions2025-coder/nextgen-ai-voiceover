@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import logging
 import os
-import secrets
 import threading
 from contextlib import asynccontextmanager
 from typing import Any
@@ -17,6 +16,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from kokoro import KModel, KPipeline
 
+from api_security import matches_configured_api_key
 from voice_catalog import LANGUAGE_BY_CODE, LANGUAGE_TEST_TEXT, VOICE_BY_ID, VOICE_CATALOG
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -49,7 +49,12 @@ class SpeechRequest(BaseModel):
 
 def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
     expected = os.environ.get("NEXTGEN_API_KEY", "").strip()
-    if expected and not secrets.compare_digest(expected, x_api_key or ""):
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="API access is disabled until the NEXTGEN_API_KEY secret is configured.",
+        )
+    if not matches_configured_api_key(expected, x_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key.")
 
 
