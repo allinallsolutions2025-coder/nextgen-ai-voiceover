@@ -37,7 +37,7 @@ The repository CI workflow ran on GitHub-hosted Node 24 runners and passed the f
 - Python backend source compilation and unit tests
 - Deployment-output validation, including PWA assets and local ONNX Runtime assets
 
-The live Pages and offline synthesis browser workflows are separate from the CI workflow. After the audit PR was merged, the Pages deployment and offline end-to-end test both passed. The offline report confirms local model loading and valid WAV synthesis with no external network requests. The live Chromium workflow started and is testing the published site; its final result should be recorded once it completes.
+The live Pages and offline synthesis browser workflows are separate from the CI workflow. After the audit PR was merged, the Pages deployment, offline end-to-end test and live Chromium test all passed. The live test verified the published app over HTTPS, model load and cache reuse, all 28 English voices and all 28 pre-generated preview WAVs, IndexedDB persistence and reload restoration, desktop layouts at 1366×768 and 1920×1080 without horizontal overflow, draft and preference recovery, paragraph ordering/split/merge/voice/pace overrides, paragraph and full-script WAV, MP3, SRT/VTT, single-paragraph regeneration, ZIP contents and downloads, pronunciation rules, voice filters, and browser error-free execution. It measured a 4.43-second model load on a GitHub-hosted Linux runner with Headless Chrome 158. The offline report separately confirms bundled local model loading, all 28 voices, valid WAV output and zero external network requests.
 
 ## Remaining verification
 
