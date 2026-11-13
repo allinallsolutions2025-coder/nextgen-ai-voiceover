@@ -48,7 +48,7 @@ jobs:
 
       - name: Validate multilingual backend source
         run: |
-          python -m py_compile backend/app.py backend/voice_catalog.py
+          python -m py_compile backend/app.py backend/voice_catalog.py backend/api_security.py
           python -m unittest discover -s backend -p "test_*.py"
 
       - name: Verify deployment output
